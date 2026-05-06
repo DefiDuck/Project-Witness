@@ -161,6 +161,23 @@ overall stability:      [--------------------] 0.00
 
 Tells you which decision types are weak under stress.
 
+## Local LLM (Ollama)
+
+Witness has no Ollama-specific code — Ollama exposes an OpenAI-compatible API,
+so we point the `openai` SDK at it and the OpenAI adapter records everything.
+
+```bash
+pip install "witness[openai]"
+ollama pull llama3.2:3b                                         # any tool-capable model
+ollama serve                                                    # if not running
+
+python -m examples.ollama_research_agent --do-replay            # capture + perturb + diff
+python -m examples.ollama_research_agent --model qwen2.5:3b --perturbation prompt_injection --do-replay
+```
+
+The captured `baseline.json` is a real LLM trace — `witness diff`,
+`witness fingerprint`, and every other tool work on it identically.
+
 ## Built-in perturbations
 
 | Name              | What it does                                                 |
