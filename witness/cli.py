@@ -488,16 +488,6 @@ def cmd_ui(port: int | None, no_browser: bool, print_path: bool) -> None:
         click.echo(str(APP_PATH))
         return
 
-    try:
-        import streamlit  # noqa: F401
-    except ImportError:
-        click.secho(
-            "streamlit isn't installed. Run: pip install 'witness[ui]'",
-            fg="red",
-            err=True,
-        )
-        sys.exit(2)
-
     args = [
         sys.executable,
         "-m",
@@ -513,7 +503,17 @@ def cmd_ui(port: int | None, no_browser: bool, print_path: bool) -> None:
     import subprocess
 
     click.echo(f"launching: {' '.join(args)}")
-    raise SystemExit(subprocess.call(args))
+    rc = subprocess.call(args)
+    if rc != 0:
+        # Most common cause: streamlit not on this Python's import path.
+        click.secho(
+            "\nstreamlit failed to start. If the error above mentions "
+            "'No module named streamlit', install it for THIS python:\n"
+            f"    {sys.executable} -m pip install --user 'witness[ui]'",
+            fg="yellow",
+            err=True,
+        )
+    raise SystemExit(rc)
 
 
 # ---------------------------------------------------------------------------

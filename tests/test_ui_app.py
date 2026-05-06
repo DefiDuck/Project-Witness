@@ -44,24 +44,25 @@ def test_cli_ui_print_path() -> None:
     assert p.name == "app.py"
 
 
-def test_cli_ui_streamlit_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When streamlit isn't importable, the CLI should give a friendly error."""
-    import sys
+def test_cli_ui_subprocess_failure_emits_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the streamlit subprocess fails, the CLI should print an install hint."""
+    import witness.cli as cli_mod
 
-    # Pretend streamlit isn't there. We do this by interceping the import.
-    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
+    # Force subprocess.call to return a non-zero code as if streamlit refused to start.
+    def fake_call(args, **kwargs):
+        return 1
 
-    def fake_import(name, *args, **kwargs):
-        if name == "streamlit":
-            raise ImportError("no streamlit")
-        return real_import(name, *args, **kwargs)
+    # The CLI imports `subprocess` lazily inside cmd_ui — patch the top-level module.
+    import subprocess as _subprocess
 
-    if isinstance(__builtins__, dict):
-        monkeypatch.setitem(__builtins__, "__import__", fake_import)
-    else:
-        monkeypatch.setattr(__builtins__, "__import__", fake_import)
+    monkeypatch.setattr(_subprocess, "call", fake_call)
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["ui"])
-    assert result.exit_code == 2
-    assert "streamlit" in (result.output + (result.stderr or "")).lower()
+    result = runner.invoke(cli_mod.cli, ["ui", "--no-browser"])
+    assert result.exit_code == 1
+    output = result.output + (result.stderr or "")
+    # Either way, the user gets a hint that mentions streamlit + pip install.
+    assert "streamlit" in output.lower()
+    assert "pip install" in output.lower()
