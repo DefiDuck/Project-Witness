@@ -30,8 +30,9 @@ def test_cli_diff_runs_and_prints(tmp_path: Path) -> None:
     save_trace(b, pb)
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["diff", str(pa), str(pb), "--no-color"])
-    assert result.exit_code == 0
+    # --plain bypasses rich so the text shape is stable for assertions.
+    result = runner.invoke(cli, ["diff", str(pa), str(pb), "--plain", "--no-color"])
+    assert result.exit_code == 0, result.output
     assert "witness diff" in result.output
     assert "final output: CHANGED" in result.output
 
@@ -92,7 +93,7 @@ def test_cli_inspect_prints_summary(tmp_path: Path) -> None:
     p = tmp_path / "t.json"
     save_trace(t, p)
     runner = CliRunner()
-    result = runner.invoke(cli, ["inspect", str(p)])
+    result = runner.invoke(cli, ["inspect", str(p), "--plain"])
     assert result.exit_code == 0
     assert "agent_name:" in result.output
     assert "inspect_me" in result.output
@@ -103,7 +104,7 @@ def test_cli_inspect_with_decisions_flag(tmp_path: Path) -> None:
     p = tmp_path / "t.json"
     save_trace(t, p)
     runner = CliRunner()
-    result = runner.invoke(cli, ["inspect", str(p), "--decisions"])
+    result = runner.invoke(cli, ["inspect", str(p), "--decisions", "--plain"])
     assert result.exit_code == 0
     assert "decisions" in result.output
     assert "model_call" in result.output

@@ -28,10 +28,12 @@ Today engineers ship agents and find out about edge cases in production. Witness
 ## Install
 
 ```bash
-pip install witness
-# or with adapters
-pip install "witness[anthropic]"
-pip install "witness[openai]"
+pip install witness                          # core only
+pip install "witness[anthropic]"             # + Anthropic adapter
+pip install "witness[openai]"                # + OpenAI adapter (also works for Ollama, vLLM, etc.)
+pip install "witness[rich]"                  # + premium terminal output
+pip install "witness[ui]"                    # + Streamlit web UI
+pip install "witness[all]"                   # everything
 ```
 
 ## 60-second demo
@@ -161,6 +163,18 @@ overall stability:      [--------------------] 0.00
 
 Tells you which decision types are weak under stress.
 
+## Web UI
+
+```bash
+pip install "witness[ui]"
+witness ui                                    # opens http://localhost:8501
+```
+
+Five interactive pages: **Load traces**, **Inspect**, **Diff**, **Perturb &
+Replay**, **Fingerprint**. Pick any baseline, choose a perturbation, run the
+agent live, and see the diff render in your browser. The fingerprint page runs
+N perturbations and renders a stability bar chart per decision type.
+
 ## Local LLM (Ollama)
 
 Witness has no Ollama-specific code — Ollama exposes an OpenAI-compatible API,
@@ -220,14 +234,17 @@ Done:
 - [x] `replay()` (programmatic + CLI rerun via `entrypoint`)
 - [x] Behavioral diff with LCS alignment (`witness diff`)
 - [x] `witness fingerprint` — N-perturbation stability vector
-- [x] CLI: `diff`, `perturb`, `inspect`, `perturbations`, `fingerprint`, `schema`
+- [x] CLI: `diff`, `perturb`, `inspect`, `perturbations`, `fingerprint`, `schema`, `ui`
+- [x] Rich-powered terminal output (auto-detected, with `--plain` fallback)
+- [x] **Streamlit web UI** (`witness ui`) — interactive trace inspection, replay, fingerprint
+- [x] Anthropic + OpenAI SDK adapters (the OpenAI one Just Works for Ollama / vLLM / LM Studio)
 
 Roadmap:
 
 - [ ] Temperature / role-inversion perturbations
 - [ ] LangSmith / Helicone trace import/export
-- [ ] Optional Streamlit UI for trace inspection
 - [ ] LangGraph / CrewAI adapters
+- [ ] PyPI publish workflow (auto-release on tag push)
 
 ## License
 

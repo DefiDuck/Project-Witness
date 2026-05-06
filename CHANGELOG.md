@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Rich-powered terminal output** for `witness diff`, `witness fingerprint`, and
+  `witness inspect`. Boxed panels, tables, color-coded change badges, stability
+  bar charts. Auto-enabled when `rich` is installed; pass `--plain` for the
+  legacy ANSI renderer. Available via `pip install "witness[rich]"` or
+  `pip install "witness[ui]"`.
+- **Streamlit web UI** (`witness ui`) — five-page interactive app:
+  Load traces, Inspect, Diff, Perturb & Replay, Fingerprint. Run perturbations
+  live in the browser, see diffs render with side-by-side panels, see stability
+  bar charts. Available via `pip install "witness[ui]"`.
+- `examples/ollama_research_agent.py` — end-to-end demo against a local Ollama
+  model via the OpenAI adapter (no Ollama-specific code in the library).
+- CLI auto-reconfigures stdout/stderr to UTF-8 on Windows so rich box-drawing
+  characters render in cmd.exe and PowerShell 5.
+
 ## v0.1.0 — initial release
 
 The MVP from `BUILD.md` (capture / perturb / diff), plus everything in the

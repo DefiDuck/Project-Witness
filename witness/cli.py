@@ -26,6 +26,28 @@ from witness.perturbations.registry import (
 from witness.schema import generate_schema_dict, schema_path, write_schema_file
 
 
+# ---------------------------------------------------------------------------
+# Rich auto-detection
+# ---------------------------------------------------------------------------
+
+
+def _rich_available() -> bool:
+    try:
+        import rich  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _print_rich(renderable: Any, *, no_color: bool = False) -> None:
+    """Print a Rich renderable to stdout."""
+    from witness.diff.format_rich import make_console
+
+    console = make_console(no_color=no_color)
+    console.print(renderable)
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(__version__, prog_name="witness")
 def cli() -> None:
@@ -41,6 +63,11 @@ def cli() -> None:
 @click.argument("baseline", type=click.Path(exists=True, path_type=Path))
 @click.argument("perturbed", type=click.Path(exists=True, path_type=Path))
 @click.option("--no-color", is_flag=True, help="Disable ANSI color output.")
+@click.option(
+    "--plain",
+    is_flag=True,
+    help="Use the plain ANSI renderer instead of rich (auto-disables when rich isn't installed).",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output a structured JSON diff.")
 @click.option(
     "--verbose",
@@ -52,6 +79,7 @@ def cmd_diff(
     baseline: Path,
     perturbed: Path,
     no_color: bool,
+    plain: bool,
     as_json: bool,
     verbose: bool,
 ) -> None:
@@ -61,6 +89,11 @@ def cmd_diff(
     d = diff_traces(base, pert)
     if as_json:
         click.echo(d.to_json())
+        return
+    if not plain and _rich_available():
+        from witness.diff.format_rich import render_diff
+
+        _print_rich(render_diff(d, verbose=verbose), no_color=no_color)
         return
     color = (not no_color) and sys.stdout.isatty()
     click.echo(format_text(d, color=color, verbose=verbose))
@@ -168,9 +201,48 @@ def cmd_perturb(
 @click.argument("trace_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--decisions", is_flag=True, help="Print the decision list.")
 @click.option("--messages", is_flag=True, help="Print the message list.")
-def cmd_inspect(trace_path: Path, decisions: bool, messages: bool) -> None:
+@click.option("--plain", is_flag=True, help="Use plain text instead of rich.")
+def cmd_inspect(trace_path: Path, decisions: bool, messages: bool, plain: bool) -> None:
     """Pretty-print key fields from a trace file."""
     t = load_trace(trace_path)
+    if not plain and _rich_available():
+        from witness.diff.format_rich import render_trace_summary
+
+        _print_rich(render_trace_summary(t))
+        if decisions:
+            from rich import box
+            from rich.table import Table
+
+            table = Table(title="decisions", box=box.SIMPLE, show_header=True, header_style="bold")
+            table.add_column("#", style="grey50", no_wrap=True)
+            table.add_column("step_id", style="grey50", no_wrap=True)
+            table.add_column("type")
+            table.add_column("duration", justify="right")
+            for i, d in enumerate(t.decisions):
+                dur = f"{d.duration_ms}ms" if d.duration_ms is not None else "—"
+                table.add_row(str(i), d.step_id[:14], d.type.value, dur)
+            _print_rich(table)
+        if messages:
+            from rich import box
+            from rich.table import Table
+
+            table = Table(title="messages", box=box.SIMPLE, show_header=True, header_style="bold")
+            table.add_column("#", style="grey50", no_wrap=True)
+            table.add_column("role")
+            table.add_column("content", overflow="ellipsis", max_width=80)
+            for i, m in enumerate(t.messages):
+                content_preview = (
+                    m.content
+                    if isinstance(m.content, str)
+                    else json.dumps(m.content, default=str)
+                )
+                if len(content_preview) > 100:
+                    content_preview = content_preview[:97] + "..."
+                table.add_row(str(i), m.role.value, content_preview)
+            _print_rich(table)
+        return
+
+    # Plain fallback
     click.echo(f"agent_name:       {t.agent_name}")
     click.echo(f"run_id:           {t.run_id}")
     click.echo(f"model:            {t.model}")
@@ -286,6 +358,12 @@ def cmd_fingerprint(
         click.echo(json.dumps(fp.summary(), indent=2, default=str))
         return
 
+    if _rich_available():
+        from witness.diff.format_rich import render_fingerprint
+
+        _print_rich(render_fingerprint(fp))
+        return
+
     color = sys.stdout.isatty()
     click.echo(_render_fingerprint(fp, color=color))
 
@@ -374,6 +452,71 @@ def cmd_schema(regenerate: bool, path: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# `witness ui`
+# ---------------------------------------------------------------------------
+
+
+@cli.command("ui")
+@click.option(
+    "--port",
+    type=int,
+    default=None,
+    help="Port for the Streamlit server (default: streamlit picks).",
+)
+@click.option(
+    "--no-browser",
+    is_flag=True,
+    help="Don't auto-open a browser tab.",
+)
+@click.option(
+    "--print-path",
+    is_flag=True,
+    help="Print the app's file path and exit (useful for `streamlit run` directly).",
+)
+def cmd_ui(port: int | None, no_browser: bool, print_path: bool) -> None:
+    """Launch the Witness web UI (Streamlit).
+
+    Requires the `ui` extra: ``pip install 'witness[ui]'``.
+    """
+    try:
+        from witness.ui import APP_PATH
+    except ImportError as e:
+        click.secho(f"failed to import witness.ui: {e}", fg="red", err=True)
+        sys.exit(2)
+
+    if print_path:
+        click.echo(str(APP_PATH))
+        return
+
+    try:
+        import streamlit  # noqa: F401
+    except ImportError:
+        click.secho(
+            "streamlit isn't installed. Run: pip install 'witness[ui]'",
+            fg="red",
+            err=True,
+        )
+        sys.exit(2)
+
+    args = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(APP_PATH),
+    ]
+    if port is not None:
+        args.extend(["--server.port", str(port)])
+    if no_browser:
+        args.extend(["--server.headless", "true"])
+
+    import subprocess
+
+    click.echo(f"launching: {' '.join(args)}")
+    raise SystemExit(subprocess.call(args))
+
+
+# ---------------------------------------------------------------------------
 # Param parsing
 # ---------------------------------------------------------------------------
 
@@ -394,6 +537,13 @@ def _parse_params(raw: tuple[str, ...]) -> dict[str, Any]:
 
 def main() -> None:
     """Entry point for the `witness` console script."""
+    # Ensure rich (and us) can emit unicode box-drawing chars on Windows cmd.exe,
+    # which defaults to cp1252. Safe no-op on shells that already speak utf-8.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, OSError):
+            pass
     cli(prog_name="witness")
 
 

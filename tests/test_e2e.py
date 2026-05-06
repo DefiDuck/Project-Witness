@@ -153,7 +153,9 @@ def test_cli_flow_end_to_end(tmp_path: Path, big_doc: str) -> None:
     assert perturbed_path.exists()
     assert perturbed_trace.parent_run_id is not None
 
-    # `witness diff baseline.json perturbed.json --no-color`
+    # `witness diff baseline.json perturbed.json --plain --no-color`
+    # --plain so the text shape is stable; encoding=utf-8 in case rich left
+    # any utf-8 box chars in stderr or elsewhere.
     result = subprocess.run(
         [
             sys.executable,
@@ -162,10 +164,13 @@ def test_cli_flow_end_to_end(tmp_path: Path, big_doc: str) -> None:
             "diff",
             str(base_path),
             str(perturbed_path),
+            "--plain",
             "--no-color",
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.returncode == 0, result.stderr
     assert "witness diff" in result.stdout
