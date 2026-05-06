@@ -41,6 +41,13 @@ baseline.json
 perturbed.json
 .witness/
 
+# Design handoff bundle (unpacked locally only)
+.design-pkg/
+
+# Streamlit subprocess test artifacts
+stdout.txt
+stderr.txt
+
 # Secrets
 .env
 .env.local

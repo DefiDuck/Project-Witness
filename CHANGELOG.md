@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### Web UI — visual design implementation
+
+Implemented the design handoff from Claude Design (dark-first, restrained,
+mono-heavy aesthetic — Linear/Vercel/LangSmith adjacent). The UI now matches
+the prototype's color palette, typography, and distinctive layouts:
+
+- **Theme**: `#0a0a0a` background, `#fafafa` foreground, desaturated amber
+  `#e8a951` accent. Dark-first via `.streamlit/config.toml`, with full design
+  tokens injected via custom CSS in `witness/ui/theme.py`.
+- **Typography**: Inter (400/500/600/700) for body, JetBrains Mono for
+  numbers and labels. 13px base size. 10.5px uppercase mono labels with
+  letter-spacing for section headers.
+- **Load page**: file-browser layout — column header with grid (filename,
+  agent, decisions, model, size, modified), accent-bar selection indicator on
+  active row, right-side inspector panel with KV pairs (dashed bottom borders),
+  head-of-trace preview block.
+- **Inspect page**: vertical decision flow with sequence line and dot nodes
+  per decision; expandable JSON detail; right metadata panel with by-type
+  counts and tools-available list.
+- **Diff page** (the hero): 4-stat grid header (decisions changed, skipped,
+  tool calls differing, final-output state) with 28px mono numbers; legend
+  row; side-by-side panels with accent strip on the perturbed side; hatched-
+  stripe placeholders for skipped/added rows; final-output diff footer with
+  red `−` baseline / green `+` perturbed columns.
+- **Perturb page**: numbered `01` / `02` / `03` sections matching design's
+  scaffolded form; status panel + progress bar around the live replay.
+- **Fingerprint page**: 3-column "headline" KvBig blocks (overall stability,
+  weakest decision, most resilient); horizontal stability bars per decision
+  type with low/mid/high color coding; comparison-style per-run table.
+- **Sidebar**: branded header with version pill, mono uppercase nav label,
+  active-screen indicator (status dot + live/idle), trace count footer.
+- **Permanent ⌘K hint** at bottom-right (visual only — full hotkey support
+  needs a custom JS component, not yet wired up).
+
+All Tier-A functional features (drag-and-drop upload, live progress / status
+panels, toast notifications, click-to-expand decision rows, search & filter,
+designed empty states, two-click confirm-on-remove, markdown export, preset
+save/load) are preserved on top of the new design.
+
 ### Web UI — functional polish (Tier A)
 
 A second pass on the Streamlit UI focused on interaction quality, not visuals
