@@ -1,0 +1,317 @@
+{
+  "$defs": {
+    "Decision": {
+      "additionalProperties": true,
+      "description": "One observable choice point in the agent's run.",
+      "properties": {
+        "step_id": {
+          "title": "Step Id",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/DecisionType"
+        },
+        "input": {
+          "additionalProperties": true,
+          "title": "Input",
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "title": "Output",
+          "type": "object"
+        },
+        "parent_step_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Step Id"
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ms"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "DecisionType": {
+      "description": "The kinds of agent decisions Witness records.\n\n`model_call`     \u2014 the agent invoked an LLM\n`tool_call`      \u2014 the agent decided to call a tool (extracted from a model response)\n`tool_result`    \u2014 a tool returned (paired with a tool_call)\n`reasoning`      \u2014 extended-thinking / scratchpad step\n`final_output`   \u2014 the agent emitted its final answer\n`custom`         \u2014 user-recorded decision via `witness.record_decision(...)`",
+      "enum": [
+        "model_call",
+        "tool_call",
+        "tool_result",
+        "reasoning",
+        "final_output",
+        "custom"
+      ],
+      "title": "DecisionType",
+      "type": "string"
+    },
+    "Message": {
+      "additionalProperties": true,
+      "description": "One conversation turn. Content is either a string or a list of content blocks\n(Anthropic-style: text/tool_use/tool_result).",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Content"
+        },
+        "tool_call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Call Id"
+        },
+        "parent_step_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Decision step_id that produced this message.",
+          "title": "Parent Step Id"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "Message",
+      "type": "object"
+    },
+    "PerturbationRecord": {
+      "additionalProperties": true,
+      "description": "Describes the perturbation applied to produce this trace.",
+      "properties": {
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "PerturbationRecord",
+      "type": "object"
+    },
+    "Role": {
+      "description": "Conversation roles. Matches Anthropic / OpenAI conventions.",
+      "enum": [
+        "system",
+        "user",
+        "assistant",
+        "tool"
+      ],
+      "title": "Role",
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Stable on-disk format for an agent trace. Forward-compatible: unknown top-level fields and unknown fields inside any object should be preserved.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "tools_available": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools Available",
+      "type": "array"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/Message"
+      },
+      "title": "Messages",
+      "type": "array"
+    },
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/Decision"
+      },
+      "title": "Decisions",
+      "type": "array"
+    },
+    "final_output": {
+      "default": null,
+      "title": "Final Output"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "wall_time_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wall Time Ms"
+    },
+    "entrypoint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "'module.path:function_name' for re-importing the agent during replay.",
+      "title": "Entrypoint"
+    },
+    "parent_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "If this is a perturbed trace, the run_id of the baseline it was derived from.",
+      "title": "Parent Run Id"
+    },
+    "perturbation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PerturbationRecord"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "inputs": {
+      "additionalProperties": true,
+      "description": "Captured arguments to the @observe-wrapped function.",
+      "title": "Inputs",
+      "type": "object"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "agent_name"
+  ],
+  "title": "Witness Trace v1.0",
+  "type": "object",
+  "$id": "https://github.com/witness-ai/witness/schema/trace_v1.json"
+}
