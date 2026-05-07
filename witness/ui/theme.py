@@ -799,12 +799,20 @@ header[data-testid="stHeader"] { height: 0 !important; min-height: 0 !important;
 .stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label > div:first-child {
     display: none !important;
 }
-.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label p {
+/* Use text-transform: none !important — Streamlit's BaseUI radio applies
+   text-transform: uppercase via its own stylesheet (winning over our
+   cascade), which is why filter chips were rendering as MODEL_CALL (2)
+   instead of model_call (2). Forcing none means we get exactly the
+   casing the Python code passed in. */
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label p,
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label span,
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label div {
     font-family: var(--mono) !important;
     font-size: 11.5px !important;
     margin: 0 !important;
-    text-transform: lowercase;
+    text-transform: none !important;
     color: inherit !important;
+    letter-spacing: 0 !important;
 }
 
 /* ---- Top-bar style header (page title + subtitle line) --------- */
