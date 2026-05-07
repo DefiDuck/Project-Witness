@@ -85,6 +85,24 @@ header[data-testid="stHeader"] { height: 0 !important; min-height: 0 !important;
 [data-testid="stSidebar"] {
     background: var(--bg-1);
     border-right: 1px solid var(--border);
+    /* Force-fix at design's 240px width — no collapse */
+    width: 240px !important;
+    min-width: 240px !important;
+    max-width: 240px !important;
+    transform: translateX(0) !important;
+    visibility: visible !important;
+}
+/* Hide the collapse button (design's sidebar is permanent) */
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
+[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+[data-testid="stSidebar"] button[kind="header"],
+[data-testid="stSidebar"] button[kind="headerNoPadding"] {
+    display: none !important;
+}
+/* Push main content over by sidebar width */
+.stApp > [data-testid="stAppViewContainer"] > .main {
+    margin-left: 0 !important;
 }
 [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
     padding: 14px 14px 12px 16px;
@@ -723,21 +741,52 @@ header[data-testid="stHeader"] { height: 0 !important; min-height: 0 !important;
 
 /* ---- Filter pill group (Load page tabs all/baseline/perturbed) -- */
 
-.witness-pill-group {
-    display: inline-flex; gap: 0;
+/* Style horizontal st.radio to look like the design's connected pill group.
+   Hide the circles, flatten labels into pill buttons, share borders. */
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] {
+    display: inline-flex !important;
+    gap: 0 !important;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
+    flex-wrap: nowrap !important;
+    margin: 0 !important;
 }
-.witness-pill {
-    height: 28px; padding: 0 12px;
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label {
+    height: 28px;
+    padding: 0 12px !important;
+    margin: 0 !important;
     background: transparent;
     color: var(--fg-dim);
-    font-size: 11.5px;
     border-right: 1px solid var(--border);
+    border-radius: 0 !important;
+    cursor: pointer;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background 80ms linear;
 }
-.witness-pill:last-child { border-right: 0; }
-.witness-pill.active { background: var(--bg-3); color: var(--fg); }
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label:last-child {
+    border-right: 0;
+}
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label:hover {
+    background: var(--hover);
+}
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label:has(input:checked) {
+    background: var(--bg-3);
+    color: var(--fg) !important;
+}
+/* hide the radio circle indicator inside pill labels */
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label > div:first-child {
+    display: none !important;
+}
+.stRadio[data-testid="stRadio"] [role="radiogroup"][aria-orientation="horizontal"] > label p {
+    font-family: var(--mono) !important;
+    font-size: 11.5px !important;
+    margin: 0 !important;
+    text-transform: lowercase;
+    color: inherit !important;
+}
 
 /* ---- Top-bar style header (page title + subtitle line) --------- */
 

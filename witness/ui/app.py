@@ -323,7 +323,10 @@ def page_load() -> None:
                 )
             with cols[2]:
                 if st.button(
-                    "Add by path", key="load_by_path", use_container_width=True
+                    "Add by path",
+                    key="load_by_path",
+                    use_container_width=True,
+                    type="primary",
                 ) and path_input:
                     try:
                         t = load_trace(path_input)
@@ -436,21 +439,25 @@ def page_load() -> None:
             for p in candidates:
                 cols = st.columns([4, 3, 1])
                 cols[0].markdown(
-                    f'<code class="mono" style="font-size: 11.5px; '
-                    f'color: var(--fg);">{escape(str(p))}</code>',
+                    f'<span class="mono" style="font-size: 12px; '
+                    f'color: var(--fg); padding: 4px 0; display: inline-block;">'
+                    f'{escape(str(p))}</span>',
                     unsafe_allow_html=True,
                 )
                 try:
                     data = json.loads(p.read_text(encoding="utf-8"))
                     cols[1].markdown(
-                        f'<span class="mono faint" style="font-size: 11px;">'
+                        f'<span class="mono faint" style="font-size: 11px; '
+                        f'padding: 4px 0; display: inline-block;">'
                         f'{escape(data.get("agent_name", "?"))} · '
                         f'{len(data.get("decisions", []))} decisions</span>',
                         unsafe_allow_html=True,
                     )
                 except Exception:
                     cols[1].caption("(unreadable)")
-                if cols[2].button("Load", key=f"load_{p}"):
+                if cols[2].button(
+                    "Load", key=f"load_{p}", use_container_width=True
+                ):
                     try:
                         t = load_trace(p)
                         actual = _add_trace(p.stem, t)
