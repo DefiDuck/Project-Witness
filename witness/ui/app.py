@@ -1803,33 +1803,45 @@ with st.sidebar:
     )
 
     # ---- Mode toggle (simple / advanced) -----------------------
-    # Pre-init session state from the radio default so _is_simple() works
-    # everywhere on first run.
-    _ss()  # ensure ui_mode is set
+    # Pre-init session state so _is_simple() works on first render.
+    _ss()
+    is_advanced_now = _ss().ui_mode == "advanced"
+    label_text = "Advanced" if is_advanced_now else "Simple"
+    label_color = "var(--del)" if is_advanced_now else "var(--fg)"
+    # Dynamic title above the toggle — turns red when advanced is on,
+    # signalling "you've enabled extra controls".
     st.markdown(
-        '<div class="uppercase-label" style="margin-bottom: 6px;">mode</div>',
+        f'<div style="display: flex; align-items: baseline; gap: 8px; '
+        f'margin-bottom: 4px;">'
+        f'<span class="uppercase-label">mode</span>'
+        f'<span style="font-size: 12.5px; font-weight: 600; '
+        f'color: {label_color}; letter-spacing: -0.005em;">{label_text}</span>'
+        f'</div>',
         unsafe_allow_html=True,
     )
-    mode = st.radio(
-        "mode",
-        ["simple", "advanced"],
-        index=0 if _ss().ui_mode == "simple" else 1,
-        horizontal=True,
+    new_advanced = st.toggle(
+        "advanced mode",
+        value=is_advanced_now,
         label_visibility="collapsed",
         key="mode_toggle",
     )
-    st.session_state.ui_mode = mode
+    new_mode = "advanced" if new_advanced else "simple"
+    if new_mode != _ss().ui_mode:
+        st.session_state.ui_mode = new_mode
+        st.rerun()
 
+    # Help text below the toggle — short enough to never wrap in 240px sidebar.
     if _is_simple():
         st.markdown(
-            '<div class="mono faint" style="font-size: 10.5px; '
-            'margin: 0 0 12px 0;">guided ui · fewer options · more help text</div>',
+            '<div class="mono faint" style="font-size: 11px; '
+            'margin: 6px 0 14px 0;">guided · fewer options</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            '<div class="mono faint" style="font-size: 10.5px; '
-            'margin: 0 0 12px 0;">all controls visible · power-user mode</div>',
+            '<div class="mono" style="font-size: 11px; '
+            'color: var(--del); margin: 6px 0 14px 0;">'
+            "all controls visible</div>",
             unsafe_allow_html=True,
         )
 

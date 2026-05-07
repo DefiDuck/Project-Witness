@@ -216,6 +216,20 @@ header[data-testid="stHeader"] { height: 0 !important; min-height: 0 !important;
 .stSlider [data-baseweb="slider"] [aria-valuenow] { color: var(--fg); }
 .stSlider [data-baseweb="slider"] > div > div > div { background: var(--accent); }
 
+/* ---- Toggle (st.toggle) ------------------------------------------ */
+/* Default off-state is a gray track. On-state should use the accent. */
+[data-testid="stSidebar"] [data-baseweb="toggle"] [role="switch"] {
+    background: var(--bg-3);
+    border: 1px solid var(--border-2);
+}
+[data-testid="stSidebar"] [data-baseweb="toggle"] [role="switch"][aria-checked="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+[data-testid="stSidebar"] [data-baseweb="toggle"] [role="switch"] > div {
+    background: var(--fg);
+}
+
 /* ---- File uploader: replace internal hint text -------------------- */
 
 [data-testid="stFileUploader"] { margin-bottom: 0.4rem; }
