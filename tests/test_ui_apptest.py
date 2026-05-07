@@ -27,13 +27,28 @@ def _new_app() -> AppTest:
     return AppTest.from_file(str(APP_PATH), default_timeout=10)
 
 
+def _page_text(at: AppTest) -> str:
+    """Concatenated text content emitted by the running page (markdown,
+    captions, info, error, warning). Used so we can assert on page titles
+    that are rendered via raw HTML topbars, not st.header()."""
+    parts: list[str] = []
+    for collection in (at.markdown, at.caption, at.info, at.warning, at.error):
+        for el in collection:
+            v = getattr(el, "value", None)
+            if v:
+                parts.append(str(v))
+    for h in at.header:
+        if h.value:
+            parts.append(str(h.value))
+    return "\n".join(parts)
+
+
 def test_app_renders_load_page_without_errors() -> None:
     at = _new_app()
     at.run()
     # Default page is 'Load traces'
     assert not at.exception, f"unexpected exception: {at.exception}"
-    headers = [h.value for h in at.header]
-    assert "Load traces" in headers
+    assert "Load traces" in _page_text(at)
 
 
 def test_app_switches_to_inspect_page_with_no_traces() -> None:
@@ -43,8 +58,7 @@ def test_app_switches_to_inspect_page_with_no_traces() -> None:
     radio = at.sidebar.radio[0]
     radio.set_value("Inspect").run()
     assert not at.exception
-    headers = [h.value for h in at.header]
-    assert "Inspect" in headers
+    assert "Inspect" in _page_text(at)
 
 
 def test_app_switches_to_diff_page_with_no_traces() -> None:

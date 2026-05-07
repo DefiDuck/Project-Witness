@@ -2,8 +2,7 @@
 
 Launch with: ``witness ui`` (preferred) or ``streamlit run witness/ui/app.py``.
 
-This is the implementation of the Witness design handoff (dark-first, restrained,
-mono-heavy aesthetic — Linear/Vercel/LangSmith adjacent).
+Implements the design from claude.ai/design (dark, mono-heavy, restrained).
 
 Design tokens, typography, and component CSS live in ``witness/ui/theme.py``.
 This module owns the page layouts and user-flow behavior.
@@ -22,7 +21,7 @@ import streamlit as st
 import witness
 from witness.core.replay import replay
 from witness.core.schema import Decision, DecisionType, Trace
-from witness.core.store import load_trace, save_trace
+from witness.core.store import load_trace
 from witness.diff.behavioral import TraceDiff, diff as diff_traces
 from witness.diff.fingerprint import Fingerprint, fingerprint as build_fingerprint
 from witness.perturbations import (
@@ -52,7 +51,7 @@ from witness.ui.theme import THEME_CSS
 
 
 # ---------------------------------------------------------------------------
-# Page setup + theme injection
+# Page setup
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
@@ -64,11 +63,10 @@ st.set_page_config(
 
 st.markdown(THEME_CSS, unsafe_allow_html=True)
 
-# Permanent ⌘K command-bar hint at bottom-right (visual only — full hotkey
-# support would need a custom JS component).
+# Bottom-right ⌘K hint (visual only)
 st.markdown(
     """
-    <div style="position: fixed; bottom: 12px; right: 12px;
+    <div style="position: fixed; bottom: 10px; right: 12px;
                 display: flex; align-items: center; gap: 6px;
                 padding: 4px 8px; background: var(--bg-2);
                 border: 1px solid var(--border); border-radius: 4px;
@@ -98,6 +96,8 @@ def _ss() -> dict[str, Any]:
             ("truncate", {"fraction": 0.75}),
             ("prompt_injection", {}),
         ]
+    if "load_filter_kind" not in st.session_state:
+        st.session_state.load_filter_kind = "all"
     return st.session_state
 
 
@@ -148,8 +148,18 @@ def _import_entrypoint(entrypoint: Optional[str]):
 
 
 # ---------------------------------------------------------------------------
-# HTML render helpers — keep visual structure consistent across pages
+# HTML render helpers
 # ---------------------------------------------------------------------------
+
+
+def _topbar(title: str, subtitle: str) -> None:
+    st.markdown(
+        f'<div class="witness-topbar">'
+        f'<span class="title">{escape(title)}</span>'
+        f'<span class="subtitle">{escape(subtitle)}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _kv(k: str, v: Any, *, accent: bool = False) -> str:
@@ -171,7 +181,6 @@ def _stat(
     sub: Optional[str] = None,
     sub_kind: Optional[str] = None,
 ) -> str:
-    """One column of the witness-stat-row grid. accent='add'|'del'|None."""
     value_class = f"value {accent}" if accent in ("add", "del") else "value"
     of_html = (
         f'<span class="of">/ {escape(str(of))}</span>' if of is not None else ""
@@ -224,15 +233,6 @@ def _empty_card(
                     st.rerun()
 
 
-def _topbar_subtitle(text: str) -> None:
-    """Mono-styled subtitle shown under the page header."""
-    st.markdown(
-        f'<div class="mono dim" style="font-size: 11.5px; margin-top: -8px; '
-        f'margin-bottom: 14px;">{escape(text)}</div>',
-        unsafe_allow_html=True,
-    )
-
-
 def _legend_dot(kind: str, label: str) -> str:
     return (
         f'<span style="display: inline-flex; align-items: center; gap: 6px; '
@@ -263,8 +263,8 @@ def _decision_type_class(d: Decision) -> str:
     return "other"
 
 
-def _short_step(d: Optional[Decision]) -> str:
-    return d.step_id[:14] if d else "?"
+def _trace_kind(t: Trace) -> str:
+    return "perturbed" if t.perturbation else "baseline"
 
 
 # ---------------------------------------------------------------------------
@@ -273,17 +273,17 @@ def _short_step(d: Optional[Decision]) -> str:
 
 
 def page_load() -> None:
-    st.header("Load traces")
     n_loaded = len(_ss().loaded_traces)
     candidates = _discover_trace_files()
-    _topbar_subtitle(
-        f"{n_loaded} loaded · {len(candidates)} files in ./traces and cwd"
+    _topbar(
+        "Load traces",
+        f"{n_loaded} loaded · {len(candidates)} files in ./traces and cwd",
     )
 
     main, side = st.columns([7, 3], gap="medium")
 
     with main:
-        # ---- A1. Drag-and-drop upload --------------------------------
+        # ---- File uploader (drag & drop) -------------------------
         uploaded = st.file_uploader(
             "drop trace JSON files",
             type=["json"],
@@ -304,52 +304,71 @@ def page_load() -> None:
             st.session_state["uploader"] = None
             st.rerun()
 
-        # ---- Path-based loader (kept under expander) -----------------
-        with st.expander("Add by path", expanded=False):
-            col_path, col_label = st.columns([3, 1])
-            path_input = col_path.text_input(
-                "path to trace JSON",
-                placeholder="traces/run_xxx.trace.json",
-                key="path_input",
-            )
-            label_override = col_label.text_input(
-                "label · optional", key="label_override"
-            )
-            if st.button("Load by path", key="load_by_path") and path_input:
-                try:
-                    t = load_trace(path_input)
-                except Exception as e:
-                    st.error(f"failed to load: {e}")
-                else:
-                    actual = _add_trace(label_override or Path(path_input).stem, t)
-                    st.toast(f"loaded {actual}")
-                    st.rerun()
+        # ---- "Add by path" inline strip (replaces broken expander)
+        with st.container():
+            cols = st.columns([3, 1, 1])
+            with cols[0]:
+                path_input = st.text_input(
+                    "path to trace JSON",
+                    placeholder="traces/run_xxx.trace.json",
+                    key="path_input",
+                    label_visibility="collapsed",
+                )
+            with cols[1]:
+                label_override = st.text_input(
+                    "label (optional)",
+                    placeholder="label · optional",
+                    key="label_override",
+                    label_visibility="collapsed",
+                )
+            with cols[2]:
+                if st.button(
+                    "Add by path", key="load_by_path", use_container_width=True
+                ) and path_input:
+                    try:
+                        t = load_trace(path_input)
+                    except Exception as e:
+                        st.error(f"failed to load: {e}")
+                    else:
+                        actual = _add_trace(
+                            label_override or Path(path_input).stem, t
+                        )
+                        st.toast(f"loaded {actual}")
+                        st.rerun()
 
-        # ---- Filter + count row -------------------------------------
-        filt_col, count_col = st.columns([4, 1])
-        with filt_col:
+        # ---- Filter row + count ---------------------------------
+        f_cols = st.columns([4, 2, 1])
+        with f_cols[0]:
             q = search_input(
                 key="loaded_search", placeholder="filter by filename or agent…"
             )
-        with count_col:
-            visible = sum(
+        with f_cols[1]:
+            kind = st.radio(
+                "kind",
+                ["all", "baseline", "perturbed"],
+                horizontal=True,
+                label_visibility="collapsed",
+                key="kind_filter",
+            )
+            _ss().load_filter_kind = kind
+        with f_cols[2]:
+            visible_count = sum(
                 1
                 for label, t in _ss().loaded_traces.items()
-                if (not q) or q in label.lower() or q in t.agent_name.lower()
+                if _matches_filter(label, t, q, kind)
             )
             total = len(_ss().loaded_traces)
             st.markdown(
                 f'<div class="mono faint" style="text-align: right; '
-                f'font-size: 11px; padding-top: 6px;">{visible} of {total}</div>',
+                f'font-size: 11px; padding-top: 8px;">{visible_count} of {total}</div>',
                 unsafe_allow_html=True,
             )
 
-        # ---- File-browser style table -------------------------------
+        # ---- File-browser table ---------------------------------
         if not _ss().loaded_traces:
             _empty_card(
                 title="No traces loaded yet",
-                description="Drop JSON files above, paste a path, or load one of "
-                "the auto-discovered files below.",
+                description="Drop JSON files above, paste a path, or load one from below.",
                 key_prefix="empty_load_main",
             )
         else:
@@ -357,38 +376,40 @@ def page_load() -> None:
                 '<div class="witness-table-header">'
                 '<span>filename</span>'
                 '<span>agent</span>'
-                '<span style="text-align: right;">decisions</span>'
+                '<span class="right">decisions</span>'
                 '<span>model</span>'
-                '<span style="text-align: right;">size</span>'
-                '<span style="text-align: right;">modified</span>'
+                '<span class="right">size</span>'
+                '<span class="right">modified</span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
             for label, t in list(_ss().loaded_traces.items()):
-                if q and q not in label.lower() and q not in t.agent_name.lower():
+                if not _matches_filter(label, t, q, kind):
                     continue
                 is_active = _ss().active_label == label
-                size = "—"  # in-memory; no file size handy here
-                modified = t.started_at[:10] if t.started_at else "—"
+                modified = (t.started_at or "")[:10] or "—"
                 row_html = (
                     f'<div class="witness-table-row{" selected" if is_active else ""}">'
                     f'<span class="filename">{escape(label)}</span>'
                     f'<span class="agent">{escape(t.agent_name)}</span>'
-                    f'<span class="num">{len(t.decisions)}</span>'
-                    f'<span class="num" style="text-align: left;">'
-                    f'{escape(t.model or "—")}</span>'
-                    f'<span class="meta">{escape(size)}</span>'
-                    f'<span class="meta">{escape(modified)}</span>'
+                    f'<span class="num right">{len(t.decisions)}</span>'
+                    f'<span class="num">{escape(t.model or "—")}</span>'
+                    f'<span class="meta right">—</span>'
+                    f'<span class="meta right">{escape(modified)}</span>'
                     f'</div>'
                 )
                 st.markdown(row_html, unsafe_allow_html=True)
-                # Action buttons under each row
-                act_cols = st.columns([3, 1, 1])
-                with act_cols[1]:
-                    if st.button("Set active", key=f"sa_{label}"):
+                # Inline action buttons (one row per trace, right-aligned)
+                btn_cols = st.columns([6, 1, 1])
+                with btn_cols[1]:
+                    if st.button(
+                        "Set active",
+                        key=f"sa_{label}",
+                        use_container_width=True,
+                    ):
                         _ss().active_label = label
                         st.rerun()
-                with act_cols[2]:
+                with btn_cols[2]:
                     confirm_button(
                         label="Remove",
                         confirm_label="Confirm",
@@ -399,15 +420,15 @@ def page_load() -> None:
                         ),
                     )
 
-        # ---- Auto-discovered list -----------------------------------
+        # ---- Auto-discovered list -------------------------------
         st.markdown(
-            '<div class="uppercase-label" style="margin: 22px 0 10px 0;">'
+            '<div class="uppercase-label" style="margin: 18px 0 8px 0;">'
             "discovered in this directory</div>",
             unsafe_allow_html=True,
         )
         if not candidates:
             _empty_card(
-                title="No trace files found in ./traces or cwd",
+                title="No trace files in ./traces or cwd",
                 description="Capture one with: python -m examples.research_agent",
                 key_prefix="empty_load_disc",
             )
@@ -438,7 +459,7 @@ def page_load() -> None:
                     except Exception as e:
                         st.error(f"{e}")
 
-    # ---- Inspector preview panel (right side) -----------------------
+    # ---- Inspector preview ---------------------------------------
     with side:
         st.markdown(
             '<div class="uppercase-label">preview</div>',
@@ -446,15 +467,17 @@ def page_load() -> None:
         )
         active = _get(_ss().active_label)
         if active is None:
-            _empty_card(
-                title="No active trace",
-                description="Click 'Set active' on a row to preview it here.",
-                key_prefix="empty_load_side",
+            st.markdown(
+                '<div class="witness-empty" style="padding: 24px 16px;">'
+                '<div class="title">No active trace</div>'
+                '<div class="desc">Click \'Set active\' on a row to preview here.</div>'
+                '</div>',
+                unsafe_allow_html=True,
             )
         else:
             st.markdown(
                 f'<div class="mono" style="font-size: 13px; color: var(--fg); '
-                f'word-break: break-all; margin-bottom: 14px;">'
+                f'word-break: break-all; margin: 6px 0 12px 0;">'
                 f'{escape(_ss().active_label)}</div>',
                 unsafe_allow_html=True,
             )
@@ -462,21 +485,16 @@ def page_load() -> None:
                 [
                     _kv("agent", active.agent_name),
                     _kv("model", active.model or "—"),
-                    _kv(
-                        "status",
-                        "perturbed" if active.perturbation else "baseline",
-                        accent=bool(active.perturbation),
-                    ),
+                    _kv("status", _trace_kind(active), accent=bool(active.perturbation)),
                     _kv("decisions", len(active.decisions)),
                     _kv("wall time", f"{(active.wall_time_ms or 0) / 1000:.2f}s"),
-                    _kv("run_id", active.run_id),
                     _kv("created", (active.started_at or "")[:19]),
                 ]
             )
             st.markdown(kv_html, unsafe_allow_html=True)
 
             st.markdown(
-                '<div class="uppercase-label" style="margin: 18px 0 8px 0;">'
+                '<div class="uppercase-label" style="margin: 14px 0 6px 0;">'
                 "head · 3 decisions</div>",
                 unsafe_allow_html=True,
             )
@@ -484,18 +502,19 @@ def page_load() -> None:
             for d in active.decisions[:3]:
                 head_lines.append(
                     f'<div class="mono" style="font-size: 11px; color: var(--fg-dim); '
-                    f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">'
+                    f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; '
+                    f'padding: 2px 0;">'
                     f'<span class="faint">{d.type.value:<13}</span>'
                     f'<span style="color: var(--fg);">'
                     f'{escape(_decision_summary(d))}</span></div>'
                 )
             st.markdown(
                 f'<div style="background: var(--bg-2); border: 1px solid var(--border); '
-                f'border-radius: 4px; padding: 10px;">{"".join(head_lines)}</div>',
+                f'border-radius: 4px; padding: 8px 10px;">{"".join(head_lines)}</div>',
                 unsafe_allow_html=True,
             )
 
-            st.markdown('<div style="height: 16px;"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
             if st.button(
                 "Open in Inspect",
                 key="side_open",
@@ -506,13 +525,27 @@ def page_load() -> None:
                 st.rerun()
 
 
+def _matches_filter(label: str, t: Trace, q: str, kind: str) -> bool:
+    if kind == "baseline" and t.perturbation:
+        return False
+    if kind == "perturbed" and not t.perturbation:
+        return False
+    if q:
+        if q in label.lower():
+            return True
+        if q in t.agent_name.lower():
+            return True
+        return False
+    return True
+
+
 def page_inspect() -> None:
-    st.header("Inspect")
     options = _trace_options()
     if not options:
+        _topbar("Inspect", "no trace loaded")
         _empty_card(
             title="No traces loaded",
-            description="Add traces on the Load traces page to begin inspecting.",
+            description="Add traces on the Load page to begin inspecting.",
             cta_label="Open Load traces",
             cta_target_page="Load traces",
             key_prefix="empty_inspect",
@@ -528,9 +561,10 @@ def page_inspect() -> None:
     _ss().active_label = label
     t = _get(label)
     assert t is not None
-    _topbar_subtitle(
-        f"{label} · {t.agent_name} · {len(t.decisions)} decisions · "
-        f"{(t.wall_time_ms or 0) / 1000:.2f}s"
+    _topbar(
+        label,
+        f"{t.agent_name} · {len(t.decisions)} decisions · "
+        f"{(t.wall_time_ms or 0) / 1000:.2f}s",
     )
 
     main, side = st.columns([7, 3], gap="medium")
@@ -538,13 +572,16 @@ def page_inspect() -> None:
     with main:
         tabs = st.tabs(["decisions", "messages", "raw JSON"])
         with tabs[0]:
-            col_q, col_view = st.columns([4, 1])
-            with col_q:
+            tcols = st.columns([4, 1])
+            with tcols[0]:
                 q = search_input(
-                    key=f"dec_search_{label}", placeholder="search decisions"
+                    key=f"dec_search_{label}",
+                    placeholder="search decisions",
                 )
-            with col_view:
-                view_table = st.toggle("table", value=False, key=f"dec_table_{label}")
+            with tcols[1]:
+                view_table = st.toggle(
+                    "table view", value=False, key=f"dec_table_{label}"
+                )
             if view_table:
                 df = _decisions_dataframe(t)
                 if q:
@@ -561,7 +598,6 @@ def page_inspect() -> None:
                 else:
                     st.dataframe(df, use_container_width=True, hide_index=True)
             else:
-                # Vertical sequence view — design's signature look on Inspect.
                 _render_inspect_sequence(t, query=q)
 
         with tabs[1]:
@@ -579,14 +615,13 @@ def page_inspect() -> None:
         with tabs[2]:
             st.json(t.model_dump(), expanded=False)
 
-    # ---- Right metadata panel -----------------------------------
     with side:
         st.markdown(
             '<div class="uppercase-label">trace metadata</div>',
             unsafe_allow_html=True,
         )
         st.markdown(
-            f'<div class="mono" style="font-size: 13px; margin-bottom: 14px;">'
+            f'<div class="mono" style="font-size: 13px; margin: 6px 0 12px 0;">'
             f'{escape(label)}</div>',
             unsafe_allow_html=True,
         )
@@ -604,13 +639,12 @@ def page_inspect() -> None:
             unsafe_allow_html=True,
         )
 
-        # By-type counts
         counts: dict[str, int] = {}
         for d in t.decisions:
             counts[d.type.value] = counts.get(d.type.value, 0) + 1
         if counts:
             st.markdown(
-                '<div class="uppercase-label" style="margin: 18px 0 8px 0;">'
+                '<div class="uppercase-label" style="margin: 14px 0 6px 0;">'
                 "by type</div>",
                 unsafe_allow_html=True,
             )
@@ -637,7 +671,7 @@ def page_inspect() -> None:
 
         if t.tools_available:
             st.markdown(
-                '<div class="uppercase-label" style="margin: 18px 0 8px 0;">'
+                '<div class="uppercase-label" style="margin: 14px 0 6px 0;">'
                 "tools available</div>",
                 unsafe_allow_html=True,
             )
@@ -648,7 +682,6 @@ def page_inspect() -> None:
             )
             st.markdown(tools_html, unsafe_allow_html=True)
 
-        # Markdown export
         st.markdown('<div style="height: 14px;"></div>', unsafe_allow_html=True)
         st.download_button(
             "Export summary (.md)",
@@ -661,16 +694,11 @@ def page_inspect() -> None:
 
 
 def _render_inspect_sequence(t: Trace, *, query: str = "") -> None:
-    """Vertical decision flow with sequence line and dot nodes — Inspect's
-    signature look. Each row is a Streamlit expander styled to match the
-    design's visual rhythm.
-    """
     if not t.decisions:
         st.caption("(no decisions in this trace)")
         return
 
     rendered = 0
-    # Open the sequence-line container
     st.markdown('<div class="witness-sequence">', unsafe_allow_html=True)
     for i, d in enumerate(t.decisions):
         if query:
@@ -690,29 +718,19 @@ def _render_inspect_sequence(t: Trace, *, query: str = "") -> None:
         type_class = _decision_type_class(d)
         time_str = (d.timestamp or "")[11:19] if d.timestamp else ""
         summary = _decision_summary(d)
-        tokens = ""
-        if d.metadata and "usage" in d.metadata:
-            usage = d.metadata.get("usage") or {}
-            t_in = usage.get("input_tokens") or 0
-            t_out = usage.get("output_tokens") or 0
-            if t_in or t_out:
-                tokens = f"{t_in + t_out}t"
-        if not tokens and d.duration_ms is not None:
-            tokens = f"{d.duration_ms}ms"
+        right_meta = (
+            f"{d.duration_ms}ms" if d.duration_ms is not None else ""
+        )
 
-        # Header row (always visible) + expander for full detail
-        row_html = (
+        st.markdown(
             f'<div class="witness-sequence-row">'
-            f'<span style="position: relative;">'
-            f'<span class="node"></span>'
             f'<span class="t">{escape(time_str)}</span>'
-            f'</span>'
             f'<span class="type {type_class}">{escape(d.type.value)}</span>'
             f'<span class="summary">{escape(summary)}</span>'
-            f'<span class="tokens">{escape(tokens)}</span>'
-            f'</div>'
+            f'<span class="tokens">{escape(right_meta)}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
-        st.markdown(row_html, unsafe_allow_html=True)
         with st.expander(f"#{i} — {summary}", expanded=False):
             cols = st.columns(2)
             with cols[0]:
@@ -727,20 +745,6 @@ def _render_inspect_sequence(t: Trace, *, query: str = "") -> None:
                     unsafe_allow_html=True,
                 )
                 st.json(d.output or {}, expanded=False)
-            meta = {
-                "step_id": d.step_id,
-                "timestamp": d.timestamp,
-                "parent_step_id": d.parent_step_id,
-                "type": d.type.value,
-                "duration_ms": d.duration_ms,
-            }
-            if d.metadata:
-                meta["metadata"] = d.metadata
-            st.markdown(
-                '<div class="uppercase-label" style="margin-top: 6px;">metadata</div>',
-                unsafe_allow_html=True,
-            )
-            st.json(meta, expanded=False)
 
     st.markdown("</div>", unsafe_allow_html=True)
     if rendered == 0 and query:
@@ -748,9 +752,9 @@ def _render_inspect_sequence(t: Trace, *, query: str = "") -> None:
 
 
 def page_diff() -> None:
-    st.header("Diff")
     options = _trace_options()
     if len(options) < 2:
+        _topbar("Diff", "load two traces to begin")
         _empty_card(
             title="Need at least two traces to diff",
             description="Load a baseline and a perturbed run on the Load page.",
@@ -772,7 +776,7 @@ def page_diff() -> None:
     a = _get(label_a)
     b = _get(label_b)
     assert a is not None and b is not None
-    _topbar_subtitle(f"{label_a} ↔ {label_b}")
+    _topbar("Diff", f"{label_a} ↔ {label_b}")
 
     d = diff_traces(a, b)
     _render_diff_hero(d)
@@ -780,7 +784,7 @@ def page_diff() -> None:
     _render_diff_side_by_side(d)
     _render_diff_final_output(d)
 
-    st.markdown('<div style="height: 22px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height: 18px;"></div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="uppercase-label">export</div>',
         unsafe_allow_html=True,
@@ -795,7 +799,6 @@ def page_diff() -> None:
 
 
 def _render_diff_hero(d: TraceDiff) -> None:
-    """The 4-stat hero header — design's signature."""
     base = d.baseline
     pert = d.perturbed
     changed = sum(
@@ -844,28 +847,24 @@ def _render_diff_hero(d: TraceDiff) -> None:
 
 def _render_diff_legend() -> None:
     st.markdown(
-        f'<div style="padding: 10px 20px; border-bottom: 1px solid var(--border); '
-        f'display: flex; align-items: center;">'
+        f'<div style="padding: 8px 0 12px 0; display: flex; align-items: center;">'
         f'{_legend_dot("dim", "unchanged")}'
         f'{_legend_dot("accent", "changed")}'
         f'{_legend_dot("del", "skipped")}'
         f'<span style="flex: 1;"></span>'
-        f'<span class="mono faint" style="font-size: 11px;">'
-        f'aligned by LCS</span>'
+        f'<span class="mono faint" style="font-size: 11px;">aligned by LCS</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
 
 def _render_diff_side_by_side(d: TraceDiff) -> None:
-    """Two-column timeline showing baseline vs perturbed decisions, with hatched
-    placeholders for skipped/added rows. Mirrors the design's hero layout.
-    """
     left, right = st.columns(2, gap="small")
     with left:
         st.markdown(
-            f'<div style="padding: 8px 16px; border-bottom: 1px solid var(--border); '
-            f'background: var(--bg-1); display: flex; justify-content: space-between;">'
+            f'<div style="padding: 8px 14px; border: 1px solid var(--border); '
+            f'border-bottom: 0; border-radius: 4px 4px 0 0; background: var(--bg-1); '
+            f'display: flex; justify-content: space-between;">'
             f'<span class="mono" style="font-size: 11.5px;">baseline</span>'
             f'<span class="mono faint" style="font-size: 10.5px;">'
             f'{len(d.baseline.decisions)} decisions</span></div>',
@@ -875,15 +874,16 @@ def _render_diff_side_by_side(d: TraceDiff) -> None:
             _render_diff_panel_row(ch, side="baseline") for ch in d.alignment.pairs
         )
         st.markdown(
-            f'<div style="border: 1px solid var(--border); border-radius: 4px; '
-            f'overflow: hidden;">{rows_html}</div>',
+            f'<div style="border: 1px solid var(--border); border-top: 0; '
+            f'border-radius: 0 0 4px 4px; overflow: hidden;">{rows_html}</div>',
             unsafe_allow_html=True,
         )
     with right:
         st.markdown(
-            f'<div style="padding: 8px 16px; border-bottom: 1px solid var(--border); '
-            f'background: var(--bg-1); display: flex; justify-content: space-between; '
-            f'border-left: 2px solid var(--accent);">'
+            f'<div style="padding: 8px 14px; border: 1px solid var(--border); '
+            f'border-bottom: 0; border-left: 2px solid var(--accent); '
+            f'border-radius: 4px 4px 0 0; background: var(--bg-1); '
+            f'display: flex; justify-content: space-between;">'
             f'<span class="mono" style="font-size: 11.5px;">perturbed</span>'
             f'<span class="mono faint" style="font-size: 10.5px;">'
             f'{len(d.perturbed.decisions)} decisions</span></div>',
@@ -894,18 +894,15 @@ def _render_diff_side_by_side(d: TraceDiff) -> None:
         )
         st.markdown(
             f'<div style="border: 1px solid var(--border); border-left: 2px solid var(--accent); '
-            f'border-radius: 4px; overflow: hidden;">{rows_html}</div>',
+            f'border-top: 0; border-radius: 0 0 4px 4px; overflow: hidden;">{rows_html}</div>',
             unsafe_allow_html=True,
         )
 
 
 def _render_diff_panel_row(ch, *, side: str) -> str:
-    """One row inside a diff side-by-side panel."""
     d_obj = ch.baseline if side == "baseline" else ch.perturbed
     if d_obj is None:
-        return (
-            f'<div class="witness-diff-placeholder">— not in {side}</div>'
-        )
+        return f'<div class="witness-diff-placeholder">— not in {side}</div>'
     dot_kind = (
         "dim"
         if ch.kind == "same"
@@ -933,10 +930,7 @@ def _render_diff_panel_row(ch, *, side: str) -> str:
 
 
 def _render_diff_final_output(d: TraceDiff) -> None:
-    """Final output diff footer — mono-font, color-coded baseline / perturbed
-    side-by-side fenced blocks.
-    """
-    st.markdown('<div style="height: 18px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height: 16px;"></div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="uppercase-label">final output diff</div>',
         unsafe_allow_html=True,
@@ -944,7 +938,7 @@ def _render_diff_final_output(d: TraceDiff) -> None:
     if not d.final_output_changed:
         st.markdown(
             '<div style="background: var(--bg-1); border: 1px solid var(--border); '
-            'border-radius: 4px; padding: 14px 18px; font-family: var(--mono); '
+            'border-radius: 4px; padding: 12px 18px; font-family: var(--mono); '
             'font-size: 11.5px; color: var(--add);">unchanged</div>',
             unsafe_allow_html=True,
         )
@@ -967,9 +961,9 @@ def _render_diff_final_output(d: TraceDiff) -> None:
 
 
 def page_perturb() -> None:
-    st.header("Perturb & Replay")
     options = _trace_options()
     if not options:
+        _topbar("Perturb & Replay", "no trace loaded")
         _empty_card(
             title="No traces loaded",
             description="Load a baseline trace to perturb and replay.",
@@ -978,9 +972,11 @@ def page_perturb() -> None:
             key_prefix="empty_perturb",
         )
         return
-    _topbar_subtitle("re-run a captured trace under an adversarial mutation")
+    _topbar(
+        "Perturb & Replay",
+        "re-run a captured trace under an adversarial mutation",
+    )
 
-    # ---- 01. baseline -----------------------------------------------------
     st.markdown(_section_header("01", "baseline trace"), unsafe_allow_html=True)
     label = st.selectbox(
         "baseline",
@@ -991,7 +987,7 @@ def page_perturb() -> None:
     base = _get(label)
     assert base is not None
     st.markdown(
-        f'<div class="mono faint" style="font-size: 11px; margin-top: -10px;">'
+        f'<div class="mono faint" style="font-size: 11px; margin-top: -8px;">'
         f'{escape(base.agent_name)} · {len(base.decisions)} decisions · '
         f'run {escape(base.run_id)}</div>',
         unsafe_allow_html=True,
@@ -1008,8 +1004,6 @@ def page_perturb() -> None:
         st.error(f"Could not import `{base.entrypoint}`.")
         return
 
-    # ---- 02. perturbation type ------------------------------------------
-    st.markdown('<div style="height: 22px;"></div>', unsafe_allow_html=True)
     st.markdown(_section_header("02", "perturbation type"), unsafe_allow_html=True)
     ptype = st.radio(
         "perturbation",
@@ -1018,19 +1012,18 @@ def page_perturb() -> None:
         label_visibility="collapsed",
     )
 
-    # ---- 03. parameters --------------------------------------------------
-    st.markdown('<div style="height: 18px;"></div>', unsafe_allow_html=True)
     st.markdown(_section_header("03", "parameters"), unsafe_allow_html=True)
     perturbation = _build_perturbation(ptype)
     if perturbation is None:
         return
 
-    st.markdown('<div style="height: 22px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height: 16px;"></div>', unsafe_allow_html=True)
     if st.button("Run", type="primary", key="run_perturb"):
-        # ---- A2. status panel + progress ----
         with StatusPanel(f"Running {ptype}…", expanded=True) as status:
             status.write(f"baseline: `{label}` ({len(base.decisions)} decisions)")
-            status.write(f"perturbation: `{ptype}` — {perturbation.record().summary}")
+            status.write(
+                f"perturbation: `{ptype}` — {perturbation.record().summary}"
+            )
             try:
                 perturbed = replay(base, perturbation, agent_fn=fn)
             except Exception as e:
@@ -1047,14 +1040,18 @@ def page_perturb() -> None:
         new_label = _add_trace(f"{label}__{ptype}", perturbed)
         st.toast(f"loaded perturbed trace as `{new_label}`")
 
-        st.markdown('<hr class="witness-divider" />', unsafe_allow_html=True)
+        st.markdown(
+            '<hr style="border: 0; height: 1px; background: var(--border); '
+            'margin: 18px 0;" />',
+            unsafe_allow_html=True,
+        )
         d = diff_traces(base, perturbed)
         _render_diff_hero(d)
         _render_diff_legend()
         _render_diff_side_by_side(d)
         _render_diff_final_output(d)
 
-        st.markdown('<div style="height: 18px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 16px;"></div>', unsafe_allow_html=True)
         st.markdown(
             '<div class="uppercase-label">export</div>',
             unsafe_allow_html=True,
@@ -1069,12 +1066,12 @@ def page_perturb() -> None:
 
 
 def page_fingerprint() -> None:
-    st.header("Fingerprint")
     options = _trace_options()
     if not options:
+        _topbar("Fingerprint", "no trace loaded")
         _empty_card(
             title="No traces loaded",
-            description="Load a baseline trace to compute a stability fingerprint.",
+            description="Load a baseline to compute a stability fingerprint.",
             cta_label="Open Load traces",
             cta_target_page="Load traces",
             key_prefix="empty_fp",
@@ -1091,8 +1088,9 @@ def page_fingerprint() -> None:
     base = _get(label)
     assert base is not None
     n_specs = len(_ss().fp_specs)
-    _topbar_subtitle(
-        f"{base.agent_name} · {n_specs} perturbations queued · run {base.run_id}"
+    _topbar(
+        "Fingerprint",
+        f"{base.agent_name} · {n_specs} perturbations queued · {base.run_id}",
     )
 
     if not base.entrypoint:
@@ -1106,36 +1104,40 @@ def page_fingerprint() -> None:
         if fn is None:
             st.warning(f"Could not import `{base.entrypoint}`. Live replay disabled.")
 
-    # ---- Preset save / load ----
-    with st.expander("Preset save / load", expanded=False):
-        col_save, col_load = st.columns(2)
-        with col_save:
-            st.download_button(
-                "Download preset (.json)",
-                data=preset_to_json(_ss().fp_specs),
-                file_name="witness_fingerprint_preset.json",
-                mime="application/json",
-                key="fp_preset_dl",
-            )
-        with col_load:
-            uploaded = st.file_uploader(
-                "load preset",
-                type=["json"],
-                key="fp_preset_upload",
-                label_visibility="collapsed",
-            )
-            if uploaded:
-                try:
-                    specs = preset_from_json(uploaded.read().decode("utf-8"))
-                    _ss().fp_specs = specs
-                    st.toast(f"loaded preset · {len(specs)} perturbations")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"invalid preset: {e}")
-
-    # ---- Spec list editor ----
+    # Preset save / load (kept inline, not behind an expander, to avoid
+    # the broken-icon bug we saw on Streamlit's expander chevron)
     st.markdown(
-        '<div class="uppercase-label" style="margin: 18px 0 10px 0;">'
+        '<div class="uppercase-label" style="margin: 14px 0 6px 0;">preset</div>',
+        unsafe_allow_html=True,
+    )
+    pcols = st.columns([1, 2])
+    with pcols[0]:
+        st.download_button(
+            "Save preset",
+            data=preset_to_json(_ss().fp_specs),
+            file_name="witness_fingerprint_preset.json",
+            mime="application/json",
+            key="fp_preset_dl",
+            use_container_width=True,
+        )
+    with pcols[1]:
+        uploaded = st.file_uploader(
+            "load preset",
+            type=["json"],
+            key="fp_preset_upload",
+            label_visibility="collapsed",
+        )
+        if uploaded:
+            try:
+                specs = preset_from_json(uploaded.read().decode("utf-8"))
+                _ss().fp_specs = specs
+                st.toast(f"loaded preset · {len(specs)} perturbations")
+                st.rerun()
+            except Exception as e:
+                st.error(f"invalid preset: {e}")
+
+    st.markdown(
+        '<div class="uppercase-label" style="margin: 16px 0 6px 0;">'
         "perturbations to run</div>",
         unsafe_allow_html=True,
     )
@@ -1146,21 +1148,35 @@ def page_fingerprint() -> None:
             unsafe_allow_html=True,
         )
         cols[1].markdown(
-            f'<span class="mono faint" style="font-size: 11px;">{escape(json.dumps(params))}</span>',
+            f'<span class="mono faint" style="font-size: 11px;">'
+            f'{escape(json.dumps(params))}</span>',
             unsafe_allow_html=True,
         )
         if cols[2].button("Remove", key=f"fp_rm_{i}"):
             _ss().fp_specs.pop(i)
             st.rerun()
-    with st.expander("Add another perturbation"):
-        ptype = st.selectbox("type", list_perturbations(), key="fp_add_type")
-        params_json = st.text_input(
-            "params (JSON dict)", "{}", key="fp_add_params"
+
+    add_cols = st.columns([2, 4, 1])
+    with add_cols[0]:
+        new_ptype = st.selectbox(
+            "type",
+            list_perturbations(),
+            key="fp_add_type",
+            label_visibility="collapsed",
         )
-        if st.button("Add", key="fp_add_btn"):
+    with add_cols[1]:
+        new_params = st.text_input(
+            "params",
+            "{}",
+            key="fp_add_params",
+            placeholder="params (JSON)",
+            label_visibility="collapsed",
+        )
+    with add_cols[2]:
+        if st.button("Add", key="fp_add_btn", use_container_width=True):
             try:
-                params = json.loads(params_json) if params_json else {}
-                _ss().fp_specs.append((ptype, params))
+                params = json.loads(new_params) if new_params else {}
+                _ss().fp_specs.append((new_ptype, params))
                 st.rerun()
             except json.JSONDecodeError as e:
                 st.error(f"invalid JSON: {e}")
@@ -1210,7 +1226,7 @@ def page_fingerprint() -> None:
         fp = build_fingerprint(base, perturbed_traces)
         _render_fingerprint_design(fp)
 
-        st.markdown('<div style="height: 22px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 16px;"></div>', unsafe_allow_html=True)
         st.markdown('<div class="uppercase-label">export</div>', unsafe_allow_html=True)
         md = fingerprint_to_markdown(fp, title=f"Witness fingerprint — {label}")
         markdown_download(
@@ -1222,14 +1238,10 @@ def page_fingerprint() -> None:
 
 
 def _render_fingerprint_design(fp: Fingerprint) -> None:
-    """Design's signature fingerprint layout: 3-column headline + horizontal
-    bars per decision type + comparison table.
-    """
     overall = fp.overall_stability()
     fout = fp.final_output_stability()
     scores = fp.stability_by_decision_type()
 
-    # ---- Headline KvBig: overall, weakest, most resilient ------
     weakest_label = "—"
     weakest_pct = ""
     most_label = "—"
@@ -1243,7 +1255,6 @@ def _render_fingerprint_design(fp: Fingerprint) -> None:
         most_pct = f"{int(most[1] * 100)}% stable"
 
     overall_pct = f"{int(overall * 100)}%"
-    fout_pct = f"{int(fout * 100)}%"
 
     st.markdown(
         f'<div class="witness-headline">'
@@ -1266,9 +1277,8 @@ def _render_fingerprint_design(fp: Fingerprint) -> None:
         unsafe_allow_html=True,
     )
 
-    # ---- Stability bars per decision type ------
     st.markdown(
-        '<div class="uppercase-label" style="margin: 0 0 12px 0;">'
+        '<div class="uppercase-label" style="margin: 8px 0 8px 0;">'
         "stability per decision type</div>",
         unsafe_allow_html=True,
     )
@@ -1297,22 +1307,27 @@ def _render_fingerprint_design(fp: Fingerprint) -> None:
         bars_html.append("</div>")
         st.markdown("".join(bars_html), unsafe_allow_html=True)
 
-    # ---- Final-output stability + per-run summary ------
+    fout_pct = f"{int(fout * 100)}%"
+    fout_color = (
+        "var(--add)"
+        if fout >= 0.66
+        else "var(--del)"
+        if fout < 0.33
+        else "var(--accent)"
+    )
     st.markdown(
-        f'<div style="margin-top: 18px; display: flex; align-items: center; '
-        f'justify-content: space-between; padding: 10px 18px; '
+        f'<div style="margin-top: 14px; display: flex; align-items: center; '
+        f'justify-content: space-between; padding: 10px 16px; '
         f'background: var(--bg-1); border: 1px solid var(--border); '
         f'border-radius: 4px;">'
         f'<span class="mono" style="font-size: 12px;">final output stability</span>'
-        f'<span class="mono" style="font-size: 13px; color: '
-        f'{"var(--add)" if fout >= 0.66 else "var(--del)" if fout < 0.33 else "var(--accent)"};">'
+        f'<span class="mono" style="font-size: 13px; color: {fout_color};">'
         f'{fout_pct}</span></div>',
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div style="height: 22px;"></div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="uppercase-label" style="margin: 0 0 12px 0;">'
+        '<div class="uppercase-label" style="margin: 18px 0 8px 0;">'
         "per-run summary</div>",
         unsafe_allow_html=True,
     )
@@ -1347,7 +1362,7 @@ def _render_fingerprint_design(fp: Fingerprint) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Perturbation builders (UI param entry)
+# Perturbation builders
 # ---------------------------------------------------------------------------
 
 
@@ -1468,7 +1483,7 @@ PAGES: dict[str, Callable[[], None]] = {
 with st.sidebar:
     st.markdown(
         '<div style="display: flex; align-items: baseline; gap: 8px; '
-        'margin-bottom: 24px;">'
+        'margin-bottom: 18px;">'
         '<span style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em;">'
         "witness</span>"
         f'<span class="mono dim" style="font-size: 10.5px;">'
@@ -1477,7 +1492,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<div class="uppercase-label" style="margin-bottom: 8px;">screens</div>',
+        '<div class="uppercase-label" style="margin-bottom: 6px;">screens</div>',
         unsafe_allow_html=True,
     )
 
@@ -1494,15 +1509,15 @@ with st.sidebar:
     )
 
     st.markdown(
-        '<div style="flex: 1; min-height: 32px;"></div>',
+        '<hr style="border: 0; height: 1px; background: var(--border); '
+        'margin: 14px 0 8px 0;" />',
         unsafe_allow_html=True,
     )
-    st.markdown('<hr class="witness-divider" />', unsafe_allow_html=True)
     n_loaded = len(_ss().loaded_traces)
     connected = bool(_ss().active_label)
     st.markdown(
         f'<div style="display: flex; align-items: center; '
-        f'justify-content: space-between; padding-top: 8px;">'
+        f'justify-content: space-between;">'
         f'<span class="mono dim" style="font-size: 11px;">'
         f'{n_loaded} trace{"" if n_loaded == 1 else "s"} loaded</span>'
         f'<span style="display: flex; align-items: center; gap: 6px;">'

@@ -1,12 +1,15 @@
 """Witness UI theme — design tokens, typography, and component CSS.
 
-Mirrors the design handoff at design-pkg/project-witness/project/Witness.html.
-Colors / spacing / type scale lifted directly from the prototype's :root vars.
+Lifted from the Witness design handoff (dark-first, mono-heavy, restrained).
 
-The CSS is injected into the Streamlit page via ``st.markdown(unsafe_allow_html=True)``
-in ``app.py``. Streamlit primitives that we can theme via .streamlit/config.toml
-already match the palette; this module handles everything Streamlit doesn't expose
-as a config knob (typography, custom component classes, layout overrides).
+CRITICAL DESIGN RULE: do NOT use `font-family: ... !important` on broad
+selectors (especially anything matching ``[class*="st-"]`` or ``span``).
+Streamlit renders chevrons and icons as ligatures inside spans whose inline
+``font-family: 'Material Symbols Outlined'`` will be silently overridden,
+causing icon names ("arrow_right", "expand_more") to leak through as text.
+
+The CSS below sets typography on the content elements only and leaves
+inline-styled icon spans alone.
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ THEME_CSS = """
     --fg-dim:    #888;
     --fg-faint:  #555;
     --fg-faintest: #3a3a3a;
-    --accent:    #e8a951;          /* desaturated amber */
+    --accent:    #e8a951;
     --accent-ink:#0a0a0a;
     --add:       #3ec286;
     --del:       #e36876;
@@ -42,192 +45,297 @@ THEME_CSS = """
 
     --radius: 4px;
     --radius-lg: 6px;
-    --row-h: 32px;
 }
 
-/* -- Streamlit globals --------------------------------------------------- */
+/* ---- Streamlit page chrome ---------------------------------------- */
 
-html, body, [class*="st-"], .stApp, .main, .block-container, p, span, div, label {
-    font-family: var(--sans) !important;
+html, body, .stApp { background: var(--bg); }
+.stApp { color: var(--fg); }
+
+/* Body typography. NB: no !important — Streamlit's icon spans must keep
+   their inline Material Symbols font-family. */
+body, .stApp, .main, .block-container { font-family: var(--sans); font-size: 13px; }
+.stMarkdown, .stMarkdown p, .stMarkdown span, .stMarkdown div,
+.stHeading, .stCaption {
+    font-family: var(--sans);
 }
-html, body, .stApp {
-    background: var(--bg) !important;
-    color: var(--fg) !important;
-    font-size: 13px !important;
-}
+
+/* Tight content padding — design is dense */
 .block-container {
-    padding-top: 1.2rem !important;
+    padding-top: 1rem !important;
     padding-bottom: 2rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
     max-width: none !important;
 }
-header[data-testid="stHeader"] { background: transparent !important; height: 0 !important; }
-[data-testid="stToolbar"] { display: none !important; }
-[data-testid="stDecoration"] { display: none !important; }
+.main .block-container { gap: 0.6rem; }
 
-/* Sidebar — match the design's 240px bg-1 panel */
+/* Hide Streamlit's top chrome */
+header[data-testid="stHeader"] { height: 0 !important; min-height: 0 !important; background: transparent !important; }
+[data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; }
+
+/* Tighten the gap between vertically stacked Streamlit blocks */
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] {
+    gap: 0.4rem;
+}
+[data-testid="stVerticalBlock"] { gap: 0.4rem; }
+
+/* ---- Sidebar ------------------------------------------------------ */
+
 [data-testid="stSidebar"] {
-    background: var(--bg-1) !important;
-    border-right: 1px solid var(--border) !important;
+    background: var(--bg-1);
+    border-right: 1px solid var(--border);
 }
 [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-    padding: 14px 14px 12px 16px !important;
+    padding: 14px 14px 12px 16px;
 }
-[data-testid="stSidebar"] hr { border-color: var(--border) !important; margin: 14px 0 !important; }
-[data-testid="stSidebar"] h1 { font-weight: 600 !important; font-size: 15px !important; letter-spacing: -0.01em !important; margin: 0 !important; }
+[data-testid="stSidebar"] hr { border-color: var(--border); margin: 12px 0; }
 
-/* Sidebar nav: target the radio so it looks like nav buttons */
-[data-testid="stSidebar"] [role="radiogroup"] { gap: 2px !important; }
-[data-testid="stSidebar"] [role="radiogroup"] label {
-    height: 28px !important;
-    padding: 0 8px !important;
-    border-radius: var(--radius) !important;
-    color: var(--fg-dim) !important;
-    background: transparent !important;
-    cursor: pointer !important;
-    transition: background 80ms linear !important;
+/* Sidebar nav radio: make labels look like nav buttons. We DO NOT touch the
+   font-family of the radio's inner icon span — the dot circle is part of
+   Streamlit's BaseUI radio and uses its own font. */
+[data-testid="stSidebar"] [role="radiogroup"] { gap: 2px; }
+[data-testid="stSidebar"] [role="radiogroup"] > label {
+    height: 28px;
+    padding: 0 8px;
+    border-radius: var(--radius);
+    color: var(--fg-dim);
+    cursor: pointer;
+    transition: background 80ms linear;
 }
-[data-testid="stSidebar"] [role="radiogroup"] label:hover { background: var(--hover) !important; }
-[data-testid="stSidebar"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {
+[data-testid="stSidebar"] [role="radiogroup"] > label:hover { background: var(--hover); }
+[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
     color: var(--fg) !important;
     background: var(--selected) !important;
 }
-[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none !important; }
-[data-testid="stSidebar"] [role="radiogroup"] label > div { font-size: 12.5px !important; }
+[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) p {
+    color: var(--fg) !important;
+    font-weight: 500;
+}
+/* hide the radio's circle indicator */
+[data-testid="stSidebar"] [role="radiogroup"] > label > div:first-child { display: none; }
+[data-testid="stSidebar"] [role="radiogroup"] > label p { font-size: 12.5px; margin: 0; }
 
-/* -- Buttons ------------------------------------------------------------- */
+/* ---- Buttons ------------------------------------------------------ */
 
 .stButton > button, .stDownloadButton > button {
-    height: 28px !important;
-    padding: 0 10px !important;
-    border: 1px solid var(--border-2) !important;
-    background: var(--bg-2) !important;
-    border-radius: var(--radius) !important;
-    color: var(--fg) !important;
-    font-size: 12px !important;
-    font-weight: 500 !important;
-    transition: background 80ms linear, border-color 80ms linear !important;
+    height: 28px;
+    min-height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--border-2);
+    background: var(--bg-2);
+    border-radius: var(--radius);
+    color: var(--fg);
+    font-size: 12px;
+    font-weight: 500;
+    transition: background 80ms linear, border-color 80ms linear;
 }
 .stButton > button:hover, .stDownloadButton > button:hover {
-    background: var(--bg-3) !important;
-    border-color: var(--fg-faintest) !important;
+    background: var(--bg-3);
+    border-color: var(--fg-faintest);
+    color: var(--fg);
 }
-.stButton > button[kind="primary"], .stButton > button[data-testid="baseButton-primary"] {
-    background: var(--accent) !important;
-    color: var(--accent-ink) !important;
-    border-color: var(--accent) !important;
-    font-weight: 600 !important;
+.stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    font-weight: 600;
 }
-
-/* -- Inputs / selects / textareas --------------------------------------- */
-
-.stTextInput input, .stTextArea textarea, .stNumberInput input, .stSelectbox > div[data-baseweb="select"] > div {
-    background: var(--bg-2) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--fg) !important;
-    font-family: var(--mono) !important;
-    font-size: 12px !important;
-    border-radius: var(--radius) !important;
+.stButton > button[kind="primary"]:hover, .stDownloadButton > button[kind="primary"]:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    filter: brightness(1.06);
 }
-.stTextInput input:focus, .stTextArea textarea:focus { border-color: var(--fg-faint) !important; }
-.stSelectbox label, .stTextInput label, .stTextArea label, .stNumberInput label, .stSlider label {
-    font-family: var(--mono) !important;
-    font-size: 10.5px !important;
-    color: var(--fg-faint) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    font-weight: 400 !important;
+.stButton > button p, .stDownloadButton > button p { margin: 0; font-size: 12px; }
+
+/* ---- Inputs ------------------------------------------------------- */
+
+.stTextInput input, .stTextArea textarea, .stNumberInput input {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 12px;
+    border-radius: var(--radius);
+    height: 32px;
 }
-
-/* -- Slider ------------------------------------------------------------- */
-
-.stSlider > div > div > div > div { background: var(--accent) !important; }
-.stSlider [role="slider"] {
-    background: var(--accent) !important;
-    border-color: var(--accent) !important;
+.stTextArea textarea { height: auto; }
+.stTextInput input:focus, .stTextArea textarea:focus { border-color: var(--fg-faint); }
+.stTextInput input::placeholder, .stTextArea textarea::placeholder {
+    color: var(--fg-faint);
+    font-family: var(--mono);
 }
 
-/* -- File uploader ------------------------------------------------------ */
+/* Selectbox: skin the BaseUI select wrapper */
+.stSelectbox > div[data-baseweb="select"] > div {
+    background: var(--bg-2);
+    border-color: var(--border);
+    border-radius: var(--radius);
+    min-height: 32px;
+}
+.stSelectbox > div[data-baseweb="select"] > div > div {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg);
+}
 
+/* Hide tooltip help icon space on labels */
+.stSelectbox label, .stTextInput label, .stTextArea label, .stNumberInput label, .stSlider label, .stRadio label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 400;
+}
+
+/* ---- Slider ------------------------------------------------------- */
+
+.stSlider [data-baseweb="slider"] [role="slider"] {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.stSlider [data-baseweb="slider"] [aria-valuenow] { color: var(--fg); }
+.stSlider [data-baseweb="slider"] > div > div > div { background: var(--accent); }
+
+/* ---- File uploader: replace internal hint text -------------------- */
+
+[data-testid="stFileUploader"] { margin-bottom: 0.4rem; }
 [data-testid="stFileUploader"] section {
-    background: var(--bg-1) !important;
-    border: 1px dashed var(--border-2) !important;
-    border-radius: var(--radius-lg) !important;
-    padding: 24px !important;
+    background: var(--bg-1);
+    border: 1px dashed var(--border-2);
+    border-radius: var(--radius-lg);
+    padding: 14px 18px;
+    min-height: 56px;
+}
+/* Hide Streamlit's default "Drag and drop file here / 200MB per file" copy
+   — but keep the visible "Browse files" button. */
+[data-testid="stFileUploader"] section [data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+    display: none;
+}
+[data-testid="stFileUploader"] section [data-testid="stFileUploaderDropzoneInstructions"] > div > small {
+    display: none;
+}
+/* Inject our own copy via ::before on the instructions container */
+[data-testid="stFileUploader"] section [data-testid="stFileUploaderDropzoneInstructions"] > div::before {
+    content: "drop trace JSON files here";
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-faint);
+    text-transform: lowercase;
 }
 [data-testid="stFileUploader"] section button {
     background: var(--bg-2) !important;
     color: var(--fg) !important;
     border: 1px solid var(--border-2) !important;
+    height: 28px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+}
+[data-testid="stFileUploader"] section button:hover {
+    background: var(--bg-3) !important;
+    border-color: var(--fg-faintest) !important;
 }
 
-/* -- Tabs --------------------------------------------------------------- */
+/* ---- Tabs --------------------------------------------------------- */
 
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    gap: 0 !important;
-    border-bottom: 1px solid var(--border) !important;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
 }
 [data-testid="stTabs"] [data-baseweb="tab"] {
-    height: 36px !important;
-    padding: 0 14px !important;
-    background: transparent !important;
-    color: var(--fg-dim) !important;
-    border-bottom: 2px solid transparent !important;
-    font-size: 12px !important;
-    font-family: var(--mono) !important;
+    height: 36px;
+    padding: 0 14px;
+    background: transparent;
+    color: var(--fg-dim);
+    border-bottom: 2px solid transparent;
+    font-family: var(--mono);
+    font-size: 12px;
 }
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
-    color: var(--fg) !important;
-    border-bottom-color: var(--accent) !important;
+    color: var(--fg);
+    border-bottom-color: var(--accent);
 }
 
-/* -- Expanders --------------------------------------------------------- */
+/* ---- Expanders --------------------------------------------------- */
+/* IMPORTANT: do NOT change font-family on the expander summary inner
+   spans — Streamlit's chevron ("expand_more"/"chevron_right") is rendered
+   as a Material Symbols ligature in a span. Override font-family there
+   and you'll see the literal text "expand_more" in the UI. */
 
 [data-testid="stExpander"] {
-    background: var(--bg-1) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
 }
 [data-testid="stExpander"] summary {
-    font-family: var(--mono) !important;
-    font-size: 12px !important;
-    color: var(--fg) !important;
+    padding: 8px 14px;
+    background: var(--bg-1);
+}
+[data-testid="stExpander"] summary p {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg);
+    margin: 0;
 }
 
-/* -- Status / Toast / Spinner -------------------------------------------- */
+/* ---- Status / Toast / Spinner ------------------------------------- */
 
 [data-testid="stStatus"] {
-    background: var(--bg-1) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius-lg) !important;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+[data-testid="stStatus"] details summary p {
+    font-family: var(--mono);
+    font-size: 12px;
 }
 
-/* -- Dataframe --------------------------------------------------------- */
+[data-testid="stToast"] {
+    background: var(--bg-2);
+    color: var(--fg);
+    border: 1px solid var(--border-2);
+    font-family: var(--mono);
+    font-size: 11.5px;
+}
+
+/* ---- Dataframe ---------------------------------------------------- */
 
 [data-testid="stDataFrame"] {
-    background: var(--bg-1) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
 }
 
-/* -- Code / pre / json -------------------------------------------------- */
+/* ---- Code / pre / json ------------------------------------------- */
 
-pre, code, .stCode {
-    background: var(--bg-2) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    font-family: var(--mono) !important;
-    font-size: 11.5px !important;
-    color: var(--fg) !important;
+.stMarkdown pre, .stMarkdown code, [data-testid="stCodeBlock"] {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg);
+}
+[data-testid="stJson"] {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
 }
 
-/* -- Headers ------------------------------------------------------------ */
+/* ---- Headings ----------------------------------------------------- */
 
-h1 { font-size: 22px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; color: var(--fg) !important; }
-h2 { font-size: 16px !important; font-weight: 500 !important; letter-spacing: -0.01em !important; color: var(--fg) !important; }
-h3 { font-size: 14px !important; font-weight: 500 !important; letter-spacing: -0.005em !important; color: var(--fg) !important; }
-h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg) !important; }
+.stMarkdown h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); margin: 0 0 4px 0; }
+.stMarkdown h2 { font-size: 16px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg); margin: 14px 0 8px 0; }
+.stMarkdown h3 { font-size: 14px; font-weight: 500; color: var(--fg); margin: 12px 0 6px 0; }
+.stMarkdown h4 { font-size: 12.5px; font-weight: 500; color: var(--fg); margin: 10px 0 4px 0; }
 
-/* -- Custom scrollbar -------------------------------------------------- */
+/* ---- Scrollbar / selection --------------------------------------- */
 
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
@@ -236,12 +344,11 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 
 ::selection { background: var(--accent); color: var(--accent-ink); }
 
-/* -- Witness component classes (used in custom HTML markup) ----------- */
+/* ---- Witness component classes (rendered via st.markdown HTML) --- */
 
-.mono { font-family: var(--mono) !important; font-feature-settings: 'zero', 'cv01'; }
-.dim  { color: var(--fg-dim) !important; }
-.faint{ color: var(--fg-faint) !important; }
-.dim2 { color: var(--fg-faintest) !important; }
+.mono { font-family: var(--mono); font-feature-settings: 'zero', 'cv01'; }
+.dim  { color: var(--fg-dim); }
+.faint{ color: var(--fg-faint); }
 
 .uppercase-label {
     font-family: var(--mono);
@@ -251,14 +358,14 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     letter-spacing: 0.04em;
 }
 
-/* status dots */
+/* dots */
 .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; vertical-align: middle; }
 .dot-accent { background: var(--accent); }
 .dot-add    { background: var(--add); }
 .dot-del    { background: var(--del); }
 .dot-dim    { background: var(--fg-faint); }
 
-/* chip — small pill-style label */
+/* chip */
 .chip {
     display: inline-flex; align-items: center; gap: 6px;
     height: 20px; padding: 0 8px;
@@ -267,14 +374,21 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     font-family: var(--mono);
     font-size: 10.5px;
     color: var(--fg-dim);
-    background: transparent;
     line-height: 1;
 }
 .chip-accent { border-color: var(--accent); color: var(--accent); }
 .chip-add { border-color: var(--add); color: var(--add); }
 .chip-del { border-color: var(--del); color: var(--del); }
 
-/* witness-stat — large number stat block (used on Diff hero / Fingerprint headline) */
+/* ---- Hero stat row (Diff page) ----------------------------------- */
+
+.witness-stat-row {
+    display: grid;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    margin: 8px 0;
+}
 .witness-stat {
     padding: 14px 20px;
     border-right: 1px solid var(--border);
@@ -314,18 +428,11 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 .witness-stat .sub.del { color: var(--del); }
 .witness-stat .sub.add { color: var(--add); }
 
-/* witness-stat-row — horizontal grid of stats (used on Diff and Fingerprint) */
-.witness-stat-row {
-    display: grid;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    background: var(--bg);
-}
+/* ---- KV pair (inspector panels) ---------------------------------- */
 
-/* witness-kv — dashed-bottom KV row (used in inspector panels) */
 .witness-kv {
     display: flex; justify-content: space-between;
-    padding: 6px 0;
+    padding: 5px 0;
     border-bottom: 1px dashed var(--border);
 }
 .witness-kv .k {
@@ -337,13 +444,19 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     font-family: var(--mono);
     font-size: 11.5px;
     color: var(--fg);
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
 }
 .witness-kv .v.accent { color: var(--accent); }
 
-/* witness-section — numbered section header (01/02/03 on Perturb) */
+/* ---- Numbered section header (Perturb page) --------------------- */
+
 .witness-section {
     display: flex; align-items: baseline; gap: 10px;
-    margin-bottom: 12px;
+    margin: 14px 0 10px 0;
 }
 .witness-section .n {
     font-family: var(--mono);
@@ -356,12 +469,13 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     color: var(--fg);
 }
 
-/* witness-bar — horizontal stability bar */
+/* ---- Stability bar (Fingerprint page) ---------------------------- */
+
 .witness-bar-row {
     display: grid;
-    grid-template-columns: 220px 1fr 70px 90px;
+    grid-template-columns: 200px 1fr 60px 90px;
     gap: 16px;
-    padding: 12px 18px;
+    padding: 10px 18px;
     align-items: center;
     border-bottom: 1px solid var(--border);
 }
@@ -387,21 +501,16 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 .witness-bar-row .delta.del { color: var(--del); }
 .witness-bar-row .delta.add { color: var(--add); }
 
-.witness-bar {
-    position: relative;
-    height: 18px;
-}
+.witness-bar { position: relative; height: 18px; }
 .witness-bar .track {
-    position: absolute;
-    left: 0; top: 50%;
+    position: absolute; left: 0; top: 50%;
     transform: translateY(-50%);
     height: 8px; width: 100%;
     background: var(--bg-3);
     border-radius: 1px;
 }
 .witness-bar .fill {
-    position: absolute;
-    left: 0; top: 50%;
+    position: absolute; left: 0; top: 50%;
     transform: translateY(-50%);
     height: 8px;
     border-radius: 1px;
@@ -411,29 +520,28 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 .witness-bar .fill.mid  { background: var(--accent); }
 .witness-bar .fill.high { background: var(--add); }
 
-/* container / panel utility */
+/* ---- Witness panel & empty card --------------------------------- */
+
 .witness-panel {
     background: var(--bg-1);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 0;
     overflow: hidden;
 }
 
-/* witness-empty — designed empty-state card */
 .witness-empty {
     text-align: center;
-    padding: 64px 24px;
+    padding: 28px 18px;
     background: var(--bg-1);
     border: 1px dashed var(--border-2);
     border-radius: var(--radius-lg);
-    margin: 24px 0;
+    margin: 8px 0;
 }
 .witness-empty .title {
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 500;
     color: var(--fg);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 .witness-empty .desc {
     font-family: var(--mono);
@@ -441,7 +549,7 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     color: var(--fg-faint);
 }
 
-/* -- Animations --------------------------------------------------------- */
+/* ---- Animations -------------------------------------------------- */
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 .fade-in { animation: fadeIn 160ms ease-out; }
@@ -452,13 +560,13 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .caret { animation: blink 1s steps(1) infinite; }
 
-/* -- File-browser style row layout (used on Load page) ------------------ */
+/* ---- Load-page file-browser table ------------------------------- */
 
 .witness-table-header {
     display: grid;
-    grid-template-columns: 1fr 140px 90px 160px 90px 110px;
+    grid-template-columns: 1.5fr 1fr 0.6fr 1fr 0.7fr 0.8fr;
     gap: 16px;
-    padding: 8px 20px;
+    padding: 8px 16px;
     border-bottom: 1px solid var(--border);
     font-family: var(--mono);
     font-size: 10.5px;
@@ -466,12 +574,13 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
+.witness-table-header span { white-space: nowrap; }
 .witness-table-row {
     display: grid;
-    grid-template-columns: 1fr 140px 90px 160px 90px 110px;
+    grid-template-columns: 1.5fr 1fr 0.6fr 1fr 0.7fr 0.8fr;
     gap: 16px;
-    padding: 0 20px;
-    height: 36px;
+    padding: 0 16px;
+    height: 34px;
     align-items: center;
     border-left: 2px solid transparent;
     border-bottom: 1px solid var(--bg-1);
@@ -479,14 +588,15 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 .witness-table-row.selected { border-left-color: var(--accent); background: var(--selected); }
 .witness-table-row .filename { font-family: var(--mono); font-size: 12px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .witness-table-row .agent { font-size: 12px; color: var(--fg-dim); }
-.witness-table-row .num { font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim); text-align: right; }
-.witness-table-row .meta { font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); text-align: right; }
+.witness-table-row .num   { font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim); }
+.witness-table-row .meta  { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); }
+.witness-table-row .right { text-align: right; }
 
-/* -- Diff-specific: side-by-side timeline rows -------------------------- */
+/* ---- Diff side-by-side rows ------------------------------------ */
 
 .witness-diff-row {
-    height: 32px;
-    padding: 0 16px;
+    height: 30px;
+    padding: 0 14px;
     display: grid;
     grid-template-columns: 8px 60px 90px 1fr;
     gap: 10px;
@@ -495,13 +605,13 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 }
 .witness-diff-row.changed.baseline-side { background: var(--del-bg); }
 .witness-diff-row.changed.perturbed-side { background: var(--add-bg); }
-.witness-diff-row .t { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); }
-.witness-diff-row .type { font-family: var(--mono); font-size: 10.5px; color: var(--fg-dim); }
+.witness-diff-row .t       { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); }
+.witness-diff-row .type    { font-family: var(--mono); font-size: 10.5px; }
 .witness-diff-row .summary { font-family: var(--mono); font-size: 11.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .witness-diff-placeholder {
-    height: 32px;
-    padding: 0 16px;
+    height: 30px;
+    padding: 0 14px;
     display: flex; align-items: center;
     background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--bg-1) 6px, var(--bg-1) 7px);
     border-bottom: 1px solid var(--bg-1);
@@ -510,52 +620,55 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     color: var(--fg-faint);
 }
 
-/* -- Inspect-specific: vertical sequence line + decision rows ----------- */
+/* ---- Inspect: vertical sequence + decision rows ---------------- */
 
 .witness-sequence {
     position: relative;
-    padding-left: 32px;
+    padding-left: 28px;
 }
 .witness-sequence::before {
     content: '';
     position: absolute;
-    left: 30px; top: 18px; bottom: 18px;
+    left: 26px; top: 18px; bottom: 18px;
     width: 1px;
     background: var(--border-2);
 }
 .witness-sequence-row {
     display: grid;
-    grid-template-columns: 70px 110px 1fr 60px;
+    grid-template-columns: 60px 110px 1fr 60px;
     gap: 14px;
-    padding: 0 20px 0 0;
-    height: 32px;
+    padding: 0 16px 0 0;
+    height: 30px;
     align-items: center;
     border-left: 2px solid transparent;
     margin-left: -2px;
+    position: relative;
 }
-.witness-sequence-row.open { border-left-color: var(--accent); }
-.witness-sequence-row .t { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); margin-left: 14px; position: relative; }
-.witness-sequence-row .node {
-    position: absolute; left: -3px; top: 50%; transform: translateY(-50%);
+.witness-sequence-row::before {
+    content: '';
+    position: absolute;
+    left: -3px; top: 50%; transform: translateY(-50%);
     width: 7px; height: 7px; border-radius: 50%;
     background: var(--bg);
     border: 1px solid var(--fg-faint);
 }
-.witness-sequence-row.open .node { background: var(--accent); border-color: var(--accent); }
+.witness-sequence-row.open { border-left-color: var(--accent); }
+.witness-sequence-row.open::before { background: var(--accent); border-color: var(--accent); }
+.witness-sequence-row .t    { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); margin-left: 14px; }
 .witness-sequence-row .type { font-family: var(--mono); font-size: 11px; }
-.witness-sequence-row .type.tool { color: var(--accent); }
+.witness-sequence-row .type.tool   { color: var(--accent); }
 .witness-sequence-row .type.output { color: var(--add); }
-.witness-sequence-row .type.other { color: var(--fg-dim); }
+.witness-sequence-row .type.other  { color: var(--fg-dim); }
 .witness-sequence-row .summary { font-size: 12.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.witness-sequence-row .tokens { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); text-align: right; }
+.witness-sequence-row .tokens  { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); text-align: right; }
 
-/* -- Headline KvBig (Fingerprint) -------------------------------------- */
+/* ---- Fingerprint headline (3 KvBig blocks) --------------------- */
 
 .witness-headline {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0;
-    margin-bottom: 32px;
+    margin: 8px 0 22px 0;
     max-width: 720px;
 }
 .witness-headline > div {
@@ -573,7 +686,7 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
     margin-bottom: 8px;
 }
 .witness-headline .value {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 500;
     color: var(--fg);
     letter-spacing: -0.02em;
@@ -584,31 +697,65 @@ h4 { font-size: 12.5px !important; font-weight: 500 !important; color: var(--fg)
 .witness-headline .sub.del { color: var(--del); }
 .witness-headline .sub.add { color: var(--add); }
 
-/* -- Comparison table --------------------------------------------------- */
+/* ---- Per-run comparison table ---------------------------------- */
 
 .witness-cmp-row {
     display: grid;
-    grid-template-columns: 1fr 100px 100px 100px;
+    grid-template-columns: 1.4fr 1fr 0.6fr 0.6fr;
     gap: 16px;
-    padding: 10px 18px;
+    padding: 9px 16px;
     border-bottom: 1px solid var(--border);
 }
 .witness-cmp-row:last-child { border-bottom: 0; }
-.witness-cmp-row.head .cell { font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.witness-cmp-row.head .cell {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
 .witness-cmp-row .cell { font-size: 12px; color: var(--fg); }
 .witness-cmp-row .cell.right { text-align: right; }
-.witness-cmp-row .cell.mono { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
-.witness-cmp-row .cell.dim { color: var(--fg-dim); }
-.witness-cmp-row .cell.del { color: var(--del); }
-.witness-cmp-row .cell.add { color: var(--add); }
+.witness-cmp-row .cell.mono  { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
+.witness-cmp-row .cell.dim   { color: var(--fg-dim); }
+.witness-cmp-row .cell.del   { color: var(--del); }
+.witness-cmp-row .cell.add   { color: var(--add); }
 
-/* -- Section divider with space --------------------------------------- */
+/* ---- Filter pill group (Load page tabs all/baseline/perturbed) -- */
 
-.witness-divider {
-    height: 1px;
-    background: var(--border);
-    border: 0;
-    margin: 18px 0;
+.witness-pill-group {
+    display: inline-flex; gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.witness-pill {
+    height: 28px; padding: 0 12px;
+    background: transparent;
+    color: var(--fg-dim);
+    font-size: 11.5px;
+    border-right: 1px solid var(--border);
+}
+.witness-pill:last-child { border-right: 0; }
+.witness-pill.active { background: var(--bg-3); color: var(--fg); }
+
+/* ---- Top-bar style header (page title + subtitle line) --------- */
+
+.witness-topbar {
+    display: flex; align-items: baseline; gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+}
+.witness-topbar .title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fg);
+}
+.witness-topbar .subtitle {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-dim);
 }
 
 /* keyboard shortcut hint */
@@ -622,6 +769,9 @@ kbd {
     padding: 1px 5px;
     line-height: 1;
 }
+
+/* hide the streamlit "manage app" footer */
+[data-testid="stStatusWidget"] { display: none !important; }
 </style>
 """
 
