@@ -22,6 +22,7 @@ from typing import Any
 import streamlit as st
 
 from witness.core.schema import Decision, DecisionType, Trace
+from witness.ui.components import empty_state
 
 _TYPE_COLOR = {
     DecisionType.MODEL_CALL.value: "var(--fg-dim)",
@@ -166,10 +167,10 @@ def _render_sequence(
     label: str, trace: Trace, *, state: dict[str, Any]
 ) -> None:
     if not trace.decisions:
-        # Empty inline — commit 6 introduces a unified empty_state component.
-        st.markdown(
-            '<div class="td-empty-inline">no decisions captured</div>',
-            unsafe_allow_html=True,
+        empty_state(
+            icon="activity",
+            message="No decisions captured.",
+            hint="The trace ended without recording any agent steps.",
         )
         return
 
@@ -275,9 +276,10 @@ def _decision_summary(d: Decision) -> str:
 
 def _render_messages(trace: Trace) -> None:
     if not trace.messages:
-        st.markdown(
-            '<div class="td-empty-inline">no messages captured</div>',
-            unsafe_allow_html=True,
+        empty_state(
+            icon="message-square",
+            message="No messages captured.",
+            hint="Adapter didn't record conversation turns for this run.",
         )
         return
     rows = []
@@ -314,11 +316,10 @@ def _render_runs(
         if t.parent_run_id == trace.run_id
     ]
     if not children:
-        st.markdown(
-            '<div class="td-empty-inline">'
-            "no runs yet · perturb this trace to create one"
-            "</div>",
-            unsafe_allow_html=True,
+        empty_state(
+            icon="git-compare",
+            message="No runs yet.",
+            hint="Open a trace and press <kbd>P</kbd> to perturb.",
         )
         return
     rows = []
@@ -344,11 +345,10 @@ def _render_stability(
 ) -> None:
     cached = (trace.metadata or {}).get("_cached_stability")
     if cached is None:
-        st.markdown(
-            '<div class="td-empty-inline">'
-            "no stability score yet · run a fingerprint to compute"
-            "</div>",
-            unsafe_allow_html=True,
+        empty_state(
+            icon="activity",
+            message="No stability score yet.",
+            hint="Run a fingerprint to compute.",
         )
         return
     pct = int(float(cached) * 100)

@@ -47,8 +47,8 @@ from witness.ui.export import (
     preset_to_json,
     trace_to_markdown,
 )
+from witness.ui.components import empty_state
 from witness.ui.lineage import render_lineage_svg
-from witness.ui.onboarding import SAMPLE_DOC, generate_sample_traces
 from witness.ui.theme import THEME_CSS
 from witness.ui.views.trace_detail import render_trace_detail
 from witness.ui.views.traces_list import render_traces_list
@@ -211,30 +211,8 @@ def _section_header(n: str, title: str) -> str:
     )
 
 
-def _empty_card(
-    title: str,
-    description: str,
-    *,
-    cta_label: Optional[str] = None,
-    cta_target_page: Optional[str] = None,
-    key_prefix: str = "empty",
-) -> None:
-    st.markdown(
-        f'<div class="witness-empty">'
-        f'<div class="title">{escape(title)}</div>'
-        f'<div class="desc">{escape(description)}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    if cta_label:
-        col_l, col_c, col_r = st.columns([1, 1, 1])
-        with col_c:
-            if st.button(
-                cta_label, key=f"{key_prefix}_cta", use_container_width=True
-            ):
-                if cta_target_page is not None:
-                    st.session_state["nav_target"] = cta_target_page
-                    st.rerun()
+# _empty_card was deleted in commit 6 — every empty state now goes through
+# witness.ui.components.empty_state (one icon, one sentence, one shortcut).
 
 
 def _legend_dot(kind: str, label: str) -> str:
@@ -364,9 +342,13 @@ def page_load() -> None:
                 unsafe_allow_html=True,
             )
 
-        # ---- File-browser table OR onboarding card --------------
+        # ---- File-browser table OR canonical empty state ---------
         if not _ss().loaded_traces:
-            _onboarding_card()
+            empty_state(
+                icon="inbox",
+                message="No traces yet.",
+                hint="Drop a <kbd>.json</kbd> file or press <kbd>Ctrl+O</kbd>.",
+            )
         else:
             # ---- Lineage graph (only when 1+ traces loaded) -----
             st.markdown(
@@ -442,10 +424,10 @@ def page_load() -> None:
             unsafe_allow_html=True,
         )
         if not candidates:
-            _empty_card(
-                title="No trace files in ./traces or cwd",
-                description="Capture one with: python -m examples.research_agent",
-                key_prefix="empty_load_disc",
+            empty_state(
+                icon="inbox",
+                message="No trace files in this directory.",
+                hint="Capture one with <kbd>python -m examples.research_agent</kbd>.",
             )
         else:
             for p in candidates:
@@ -544,101 +526,12 @@ def page_load() -> None:
                 st.rerun()
 
 
-def _onboarding_card() -> None:
-    """First-run welcome panel — three clear paths into the app.
-
-    Layout: a header section with title + subtitle + "GET STARTED" label,
-    then three side-by-side bordered Streamlit containers (one per path).
-    The containers can't be wrapped in a single outer card because
-    `st.columns()` and `st.container()` can't be nested inside raw HTML.
-    """
-    # ---- Header section (no card wrapper) -----------------------
-    st.markdown(
-        '<div style="margin: 14px 0 4px 0;">'
-        '<div style="font-size: 16px; font-weight: 500; color: var(--fg); '
-        'margin-bottom: 6px;">Welcome to WindTunnel</div>'
-        '<div class="mono faint" style="font-size: 12px;">'
-        "Capture, perturb, and diff your agent's decisions."
-        "</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="uppercase-label" style="margin: 16px 0 8px 0;">'
-        "get started — pick one"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    cols = st.columns(3, gap="medium")
-    # 1. Try sample data
-    with cols[0]:
-        with st.container(border=True):
-            st.markdown(
-                '<div style="font-size: 12.5px; font-weight: 500; '
-                'color: var(--fg); margin-bottom: 6px;">Try sample data</div>'
-                '<div class="mono faint" style="font-size: 11px; '
-                'margin-bottom: 14px; min-height: 56px;">'
-                "Capture a small mock baseline + truncate perturbation. "
-                "Lets you click through every page in the app immediately."
-                "</div>",
-                unsafe_allow_html=True,
-            )
-            if st.button(
-                "Generate samples",
-                key="onb_sample",
-                type="primary",
-                use_container_width=True,
-            ):
-                try:
-                    baseline, perturbed = generate_sample_traces()
-                except Exception as e:
-                    st.error(f"failed: {e}")
-                else:
-                    _add_trace("baseline", baseline)
-                    _add_trace("perturbed", perturbed)
-                    st.toast("loaded baseline + perturbed sample traces")
-                    st.rerun()
-
-    # 2. Drop a trace
-    with cols[1]:
-        with st.container(border=True):
-            st.markdown(
-                '<div style="font-size: 12.5px; font-weight: 500; '
-                'color: var(--fg); margin-bottom: 6px;">Drop a trace</div>'
-                '<div class="mono faint" style="font-size: 11px; '
-                'margin-bottom: 14px; min-height: 56px;">'
-                "Drag any trace JSON file onto the upload zone above, "
-                "or paste a path."
-                "</div>"
-                '<div style="height: 28px; padding: 0 12px; border: 1px solid '
-                "var(--border); border-radius: var(--radius); display: flex; "
-                "align-items: center; justify-content: center; "
-                "color: var(--fg-faint); font-family: var(--mono); "
-                'font-size: 11.5px;">↑ uploader is above</div>',
-                unsafe_allow_html=True,
-            )
-
-    # 3. Capture from Python
-    with cols[2]:
-        with st.container(border=True):
-            st.markdown(
-                '<div style="font-size: 12.5px; font-weight: 500; '
-                'color: var(--fg); margin-bottom: 6px;">Capture from Python</div>'
-                '<div class="mono faint" style="font-size: 11px; '
-                'margin-bottom: 14px; min-height: 56px;">'
-                "Wrap your agent function with @witness.observe, run it once, "
-                "then load the resulting JSON here."
-                "</div>",
-                unsafe_allow_html=True,
-            )
-            st.code(
-                "import witness\n\n"
-                '@witness.observe(name="my_agent")\n'
-                "def my_agent(...): ...\n\n"
-                "my_agent(...)  # writes traces/<run>.json",
-                language="python",
-            )
+# _onboarding_card was deleted in commit 6 — the welcome card, its three
+# sub-cards, and the "Generate samples" button violated hard rule 3 of the
+# redesign brief (no welcome cards, no sub-cards). The Traces page now
+# shows a single empty_state when no traces are loaded; the sample-trace
+# generator is still callable as witness.ui.generate_sample_traces() for
+# tests and the example script.
 
 
 def _next_action_hint() -> None:
@@ -703,12 +596,10 @@ def page_inspect() -> None:
     options = _trace_options()
     if not options:
         _topbar("Inspect", "no trace loaded")
-        _empty_card(
-            title="No traces loaded",
-            description="Add traces on the Load page to begin inspecting.",
-            cta_label="Open Load traces",
-            cta_target_page="Load traces",
-            key_prefix="empty_inspect",
+        empty_state(
+            icon="list-tree",
+            message="No traces loaded.",
+            hint="Open <kbd>Traces</kbd> and pick one.",
         )
         return
 
@@ -948,12 +839,10 @@ def page_diff() -> None:
     options = _trace_options()
     if len(options) < 2:
         _topbar("Diff", "load two traces to begin")
-        _empty_card(
-            title="Need at least two traces to diff",
-            description="Load a baseline and a perturbed run on the Load page.",
-            cta_label="Open Load traces",
-            cta_target_page="Load traces",
-            key_prefix="empty_diff",
+        empty_state(
+            icon="git-compare",
+            message="No diffs yet.",
+            hint="Open a trace and press <kbd>P</kbd> to perturb.",
         )
         return
 
@@ -1188,12 +1077,10 @@ def page_perturb() -> None:
     options = _trace_options()
     if not options:
         _topbar("Perturb & Replay", "no trace loaded")
-        _empty_card(
-            title="No traces loaded",
-            description="Load a baseline trace to perturb and replay.",
-            cta_label="Open Load traces",
-            cta_target_page="Load traces",
-            key_prefix="empty_perturb",
+        empty_state(
+            icon="git-compare",
+            message="No traces loaded.",
+            hint="Open <kbd>Traces</kbd> and pick a baseline.",
         )
         return
     _topbar(
@@ -1293,12 +1180,10 @@ def page_fingerprint() -> None:
     options = _trace_options()
     if not options:
         _topbar("Fingerprint", "no trace loaded")
-        _empty_card(
-            title="No traces loaded",
-            description="Load a baseline to compute a stability fingerprint.",
-            cta_label="Open Load traces",
-            cta_target_page="Load traces",
-            key_prefix="empty_fp",
+        empty_state(
+            icon="activity",
+            message="No traces loaded.",
+            hint="Open <kbd>Traces</kbd> and pick a baseline.",
         )
         return
 
@@ -1770,7 +1655,11 @@ def view_traces() -> None:
     render_traces_list(
         state,
         add_trace=_add_trace,
-        on_empty=_onboarding_card,
+        on_empty=lambda: empty_state(
+            icon="inbox",
+            message="No traces yet.",
+            hint="Drop a <kbd>.json</kbd> file or press <kbd>Ctrl+O</kbd>.",
+        ),
     )
 
 

@@ -1157,6 +1157,37 @@ kbd {
 .td-run-type { color: var(--fg-dim); font-size: 12px; }
 .td-run-decisions { color: var(--fg-faint); font-size: 11.5px; text-align: right; }
 
+/* ---- Empty state (commit 6) ----------------------------------- */
+
+.es-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 64px 24px;
+    gap: 8px;
+}
+.es-icon {
+    color: var(--fg-faint);
+    margin-bottom: 4px;
+    line-height: 0;
+}
+.es-icon svg { display: block; }
+.es-message {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--fg-muted);
+    line-height: 1.5;
+}
+.es-hint {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-faint);
+    line-height: 1.5;
+}
+.es-hint kbd { margin: 0 2px; }
+
 /* Stability headline */
 .td-stability-headline {
     display: flex;
