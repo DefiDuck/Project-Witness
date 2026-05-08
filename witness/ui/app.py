@@ -101,27 +101,7 @@ def _ss() -> dict[str, Any]:
         ]
     if "load_filter_kind" not in st.session_state:
         st.session_state.load_filter_kind = "all"
-    if "ui_mode" not in st.session_state:
-        # Default to simple — friendlier first impression. Power users
-        # toggle to advanced via the sidebar switch.
-        st.session_state.ui_mode = "simple"
     return st.session_state
-
-
-def _is_simple() -> bool:
-    """Return True when the UI is in beginner / simple mode."""
-    return _ss().ui_mode == "simple"
-
-
-def _help(text: str) -> str:
-    """Render a small help caption in mono-faint — used to add explanatory
-    context next to terms like 'perturbation' / 'fingerprint' for new users.
-    Renders only in simple mode (caller should gate the call)."""
-    return (
-        f'<div class="mono faint" style="font-size: 11px; '
-        f'color: var(--fg-faint); margin: 4px 0 10px 0; line-height: 1.55;">'
-        f'{escape(text)}</div>'
-    )
 
 
 def _add_trace(label: str, trace: Trace) -> str:
@@ -768,45 +748,21 @@ def page_inspect() -> None:
         f"{(t.wall_time_ms or 0) / 1000:.2f}s",
     )
 
-    if _is_simple():
-        st.markdown(
-            _help(
-                "Each row below is one decision your agent made — a tool "
-                "call, a model call, the final answer, etc. Click a row to "
-                "see its full input and output."
-            ),
-            unsafe_allow_html=True,
-        )
-
     main, side = st.columns([7, 3], gap="medium")
 
     with main:
-        # In simple mode we hide the messages and raw JSON tabs — most
-        # users only ever look at the decision sequence.
-        tabs = st.tabs(
-            ["decisions"]
-            if _is_simple()
-            else ["decisions", "messages", "raw JSON"]
-        )
+        tabs = st.tabs(["decisions", "messages", "raw JSON"])
         with tabs[0]:
-            if _is_simple():
-                # Search only — hide table-view toggle (advanced-only).
+            tcols = st.columns([4, 1])
+            with tcols[0]:
                 q = search_input(
                     key=f"dec_search_{label}",
                     placeholder="search decisions",
                 )
-                view_table = False
-            else:
-                tcols = st.columns([4, 1])
-                with tcols[0]:
-                    q = search_input(
-                        key=f"dec_search_{label}",
-                        placeholder="search decisions",
-                    )
-                with tcols[1]:
-                    view_table = st.toggle(
-                        "table view", value=False, key=f"dec_table_{label}"
-                    )
+            with tcols[1]:
+                view_table = st.toggle(
+                    "table view", value=False, key=f"dec_table_{label}"
+                )
 
             # Decision-type filter chips — only render types that exist
             type_filter = _decision_type_chips(t, key=f"dec_type_{label}")
@@ -834,24 +790,22 @@ def page_inspect() -> None:
             else:
                 _render_inspect_sequence(t, query=q)
 
-        # messages + raw JSON tabs are advanced-only
-        if not _is_simple():
-            with tabs[1]:
-                q = search_input(
-                    key=f"msg_search_{label}", placeholder="search messages"
+        with tabs[1]:
+            q = search_input(
+                key=f"msg_search_{label}", placeholder="search messages"
+            )
+            rows = _messages_dataframe(t).to_dict("records")
+            rows = filter_rows(rows, q)
+            if rows:
+                st.dataframe(
+                    pd.DataFrame(rows),
+                    use_container_width=True,
+                    hide_index=True,
                 )
-                rows = _messages_dataframe(t).to_dict("records")
-                rows = filter_rows(rows, q)
-                if rows:
-                    st.dataframe(
-                        pd.DataFrame(rows),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-                else:
-                    st.caption("(no messages match)")
-            with tabs[2]:
-                st.json(t.model_dump(), expanded=False)
+            else:
+                st.caption("(no messages match)")
+        with tabs[2]:
+            st.json(t.model_dump(), expanded=False)
 
     with side:
         st.markdown(
@@ -1274,24 +1228,9 @@ def page_perturb() -> None:
         return
 
     st.markdown(_section_header("02", "perturbation type"), unsafe_allow_html=True)
-    if _is_simple():
-        st.markdown(
-            _help(
-                "A perturbation is a controlled change applied to the agent "
-                "before re-running it. 'truncate' shortens the input to test "
-                "what the agent does with less context."
-            ),
-            unsafe_allow_html=True,
-        )
-        # Only the truncate perturbation in simple mode — the other three
-        # (prompt_injection, model_swap, tool_removal) require either an
-        # adversarial mindset or agent cooperation.
-        perturbation_options = ["truncate"]
-    else:
-        perturbation_options = list_perturbations()
     ptype = st.radio(
         "perturbation",
-        perturbation_options,
+        list_perturbations(),
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -1388,46 +1327,36 @@ def page_fingerprint() -> None:
         if fn is None:
             st.warning(f"Could not import `{base.entrypoint}`. Live replay disabled.")
 
-    if _is_simple():
-        st.markdown(
-            _help(
-                "A fingerprint runs several perturbations and reports how "
-                "stable each kind of decision is. Low scores point to weak "
-                "spots in your agent."
-            ),
-            unsafe_allow_html=True,
+    # Preset save / load row.
+    st.markdown(
+        '<div class="uppercase-label" style="margin: 14px 0 6px 0;">preset</div>',
+        unsafe_allow_html=True,
+    )
+    pcols = st.columns([1, 2])
+    with pcols[0]:
+        st.download_button(
+            "Save preset",
+            data=preset_to_json(_ss().fp_specs),
+            file_name="witness_fingerprint_preset.json",
+            mime="application/json",
+            key="fp_preset_dl",
+            use_container_width=True,
         )
-    else:
-        # Preset save / load is an advanced-only convenience.
-        st.markdown(
-            '<div class="uppercase-label" style="margin: 14px 0 6px 0;">preset</div>',
-            unsafe_allow_html=True,
+    with pcols[1]:
+        uploaded = st.file_uploader(
+            "load preset",
+            type=["json"],
+            key="fp_preset_upload",
+            label_visibility="collapsed",
         )
-        pcols = st.columns([1, 2])
-        with pcols[0]:
-            st.download_button(
-                "Save preset",
-                data=preset_to_json(_ss().fp_specs),
-                file_name="witness_fingerprint_preset.json",
-                mime="application/json",
-                key="fp_preset_dl",
-                use_container_width=True,
-            )
-        with pcols[1]:
-            uploaded = st.file_uploader(
-                "load preset",
-                type=["json"],
-                key="fp_preset_upload",
-                label_visibility="collapsed",
-            )
-            if uploaded:
-                try:
-                    specs = preset_from_json(uploaded.read().decode("utf-8"))
-                    _ss().fp_specs = specs
-                    st.toast(f"loaded preset · {len(specs)} perturbations")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"invalid preset: {e}")
+        if uploaded:
+            try:
+                specs = preset_from_json(uploaded.read().decode("utf-8"))
+                _ss().fp_specs = specs
+                st.toast(f"loaded preset · {len(specs)} perturbations")
+                st.rerun()
+            except Exception as e:
+                st.error(f"invalid preset: {e}")
 
     st.markdown(
         '<div class="uppercase-label" style="margin: 16px 0 6px 0;">'
@@ -1926,49 +1855,6 @@ with st.sidebar:
         "</div>",
         unsafe_allow_html=True,
     )
-
-    # ---- Mode toggle (simple / advanced) -----------------------
-    # Pre-init session state so _is_simple() works on first render.
-    _ss()
-    is_advanced_now = _ss().ui_mode == "advanced"
-    label_text = "Advanced" if is_advanced_now else "Simple"
-    label_color = "var(--del)" if is_advanced_now else "var(--fg)"
-    # Dynamic title above the toggle — turns red when advanced is on,
-    # signalling "you've enabled extra controls".
-    st.markdown(
-        f'<div style="display: flex; align-items: baseline; gap: 8px; '
-        f'margin-bottom: 4px;">'
-        f'<span class="uppercase-label">mode</span>'
-        f'<span style="font-size: 12.5px; font-weight: 600; '
-        f'color: {label_color}; letter-spacing: -0.005em;">{label_text}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    new_advanced = st.toggle(
-        "advanced mode",
-        value=is_advanced_now,
-        label_visibility="collapsed",
-        key="mode_toggle",
-    )
-    new_mode = "advanced" if new_advanced else "simple"
-    if new_mode != _ss().ui_mode:
-        st.session_state.ui_mode = new_mode
-        st.rerun()
-
-    # Help text below the toggle — short enough to never wrap in 240px sidebar.
-    if _is_simple():
-        st.markdown(
-            '<div class="mono faint" style="font-size: 11px; '
-            'margin: 6px 0 14px 0;">guided · fewer options</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            '<div class="mono" style="font-size: 11px; '
-            'color: var(--del); margin: 6px 0 14px 0;">'
-            "all controls visible</div>",
-            unsafe_allow_html=True,
-        )
 
     st.markdown(
         '<div class="uppercase-label" style="margin-bottom: 6px;">screens</div>',
