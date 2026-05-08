@@ -48,6 +48,11 @@ from witness.ui.export import (
     trace_to_markdown,
 )
 from witness.ui.components import empty_state
+from witness.ui.components.command_bar import (
+    close_command_bar,
+    open_command_bar,
+    render_command_bar,
+)
 from witness.ui.lineage import render_lineage_svg
 from witness.ui.theme import THEME_CSS
 from witness.ui.views.trace_detail import render_trace_detail
@@ -67,17 +72,19 @@ st.set_page_config(
 
 st.markdown(THEME_CSS, unsafe_allow_html=True)
 
-# Bottom-right ⌘K hint (visual only)
+# Bottom-right ⌘K hint — clickable, opens the command bar via ?cmd=open.
+# (Real ⌘K hotkey requires JS we don't ship in v1; the brief calls this
+# v1 explicitly, so a click target is sufficient.)
 st.markdown(
     """
-    <div style="position: fixed; bottom: 10px; right: 12px;
+    <a href="?cmd=open" style="position: fixed; bottom: 10px; right: 12px;
                 display: flex; align-items: center; gap: 6px;
-                padding: 4px 8px; background: var(--bg-2);
+                padding: 4px 8px; background: var(--bg-raised);
                 border: 1px solid var(--border); border-radius: 4px;
-                pointer-events: none; z-index: 1000;">
+                z-index: 1000; text-decoration: none; color: inherit;">
       <kbd>Ctrl</kbd><kbd>K</kbd>
-      <span class="mono faint" style="font-size: 10.5px; margin-left: 4px;">command</span>
-    </div>
+      <span class="mono" style="font-size: 11px; color: var(--fg-muted); margin-left: 4px;">command</span>
+    </a>
     """,
     unsafe_allow_html=True,
 )
@@ -1743,6 +1750,46 @@ def view_settings() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Command-bar URL dispatch
+# ---------------------------------------------------------------------------
+
+
+def _handle_cmd_url() -> None:
+    """Process ?cmd=open / ?cmd_close=1 / ?nav=<section> from the URL.
+
+    The command bar emits these via anchor links so navigation works
+    without JS. Strip the params after handling so refresh doesn't
+    re-trigger.
+    """
+    qp = st.query_params
+    state = _ss()
+
+    cmd_raw = qp.get("cmd")
+    cmd = cmd_raw[0] if isinstance(cmd_raw, list) and cmd_raw else cmd_raw
+    if cmd == "open":
+        open_command_bar(state)
+        st.query_params.clear()
+        st.rerun()
+
+    close_raw = qp.get("cmd_close")
+    if close_raw:
+        close_command_bar(state)
+        st.query_params.clear()
+        st.rerun()
+
+    nav_raw = qp.get("nav")
+    nav = nav_raw[0] if isinstance(nav_raw, list) and nav_raw else nav_raw
+    if nav in ("Traces", "Diffs", "Settings"):
+        close_command_bar(state)
+        st.session_state["nav_target"] = nav
+        st.query_params.clear()
+        st.rerun()
+
+
+_handle_cmd_url()
+
+
+# ---------------------------------------------------------------------------
 # Sidebar / nav
 # ---------------------------------------------------------------------------
 
@@ -1801,3 +1848,6 @@ with st.sidebar:
     )
 
 PAGES[page]()
+
+# Command-bar overlay renders last so it sits on top of the page.
+render_command_bar(_ss())

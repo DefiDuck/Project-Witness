@@ -1157,6 +1157,75 @@ kbd {
 .td-run-type { color: var(--fg-dim); font-size: 12px; }
 .td-run-decisions { color: var(--fg-faint); font-size: 11.5px; text-align: right; }
 
+/* ---- Command bar (commit 7) ---------------------------------- */
+
+.cb-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 96px;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+}
+.cb-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+.cb-panel {
+    position: relative;
+    z-index: 1;
+    width: 480px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    overflow: hidden;
+}
+.cb-input-wrap {
+    height: 38px;
+    border-bottom: 1px solid var(--border);
+}
+.cb-results {
+    padding: 6px 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.cb-row {
+    display: grid;
+    grid-template-columns: 14px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    height: 28px;
+    padding: 0 14px;
+    color: var(--fg);
+    text-decoration: none;
+    transition: background 60ms linear;
+}
+.cb-row:hover { background: var(--bg-page); }
+.cb-row-icon { color: var(--fg-faint); display: flex; align-items: center; }
+.cb-row-icon svg { display: block; }
+.cb-row-label { font-size: 13px; }
+.cb-row-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-muted);
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+.cb-empty {
+    padding: 18px 14px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-faint);
+}
+
 /* ---- Empty state (commit 6) ----------------------------------- */
 
 .es-wrap {
