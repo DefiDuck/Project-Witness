@@ -15,6 +15,7 @@ Active rail item gets a 2px --accent left-border and --bg-2 background.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from html import escape
 from typing import Any
@@ -216,37 +217,25 @@ def _render_sequence(
 
 
 def _render_decision_fields(d: Decision) -> None:
-    """Selected decision rendered as labeled fields, with Raw JSON disclosure."""
-    color = _TYPE_COLOR.get(d.type.value, "var(--fg-dim)")
-    summary = _decision_summary(d)
-    duration = f"{d.duration_ms} ms" if d.duration_ms is not None else "—"
+    """Render the selected decision in the right pane.
 
-    fields_html = (
-        f'<div class="td-fields">'
-        f'<div class="td-field-row">'
-        f'<span class="td-field-label">type</span>'
-        f'<span class="td-field-value mono" style="color: {color};">'
-        f'{escape(d.type.value)}</span>'
-        f'</div>'
-        f'<div class="td-field-row">'
-        f'<span class="td-field-label">summary</span>'
-        f'<span class="td-field-value">{escape(summary)}</span>'
-        f'</div>'
-        f'<div class="td-field-row">'
-        f'<span class="td-field-label">step_id</span>'
-        f'<span class="td-field-value mono">{escape(d.step_id)}</span>'
-        f'</div>'
-        f'<div class="td-field-row">'
-        f'<span class="td-field-label">duration</span>'
-        f'<span class="td-field-value mono">{escape(duration)}</span>'
-        f'</div>'
-        f'<div class="td-field-row">'
-        f'<span class="td-field-label">timestamp</span>'
-        f'<span class="td-field-value mono">{escape(d.timestamp or "—")}</span>'
-        f'</div>'
-        f'</div>'
+    Two regions stacked top to bottom:
+
+    1. Thin metadata strip — pipe-separated step_id · duration · timestamp.
+    2. Typed content blocks — the actual prompt/response/tool args/etc,
+       rendered in mono (or prose for final_output) so engineers can read
+       what the agent actually did without expanding Raw JSON.
+
+    Below both: the Raw JSON expander as an escape hatch.
+    """
+    duration = f"{d.duration_ms} ms" if d.duration_ms is not None else "—"
+    meta = f"{d.step_id} · {duration} · {d.timestamp or '—'}"
+    st.markdown(
+        f'<div class="td-meta-strip">{escape(meta)}</div>',
+        unsafe_allow_html=True,
     )
-    st.markdown(fields_html, unsafe_allow_html=True)
+
+    st.markdown(_render_decision_content(d), unsafe_allow_html=True)
 
     with st.expander("Raw JSON", expanded=False):
         st.json(
@@ -259,14 +248,193 @@ def _render_decision_fields(d: Decision) -> None:
         )
 
 
-def _decision_summary(d: Decision) -> str:
-    if d.type == DecisionType.TOOL_CALL:
-        name = d.input.get("name") or d.input.get("tool") or "?"
-        return f"tool_call · {name}"
+# ---------------------------------------------------------------------------
+# Typed content blocks — one renderer per decision type
+# ---------------------------------------------------------------------------
+
+
+def _render_block(
+    label: str,
+    body_html: str,
+    *,
+    mono: bool = True,
+    chip: str | None = None,
+    expand: bool = False,
+) -> str:
+    """Standard typed-content block: caps-label header (with optional
+    right-aligned chip) and a body div with the right typography."""
+    chip_html = (
+        f'<span class="td-block-chip">{escape(chip)}</span>' if chip else ""
+    )
+    body_class = "td-block-body"
+    if not mono:
+        body_class += " prose"
+    if expand:
+        body_class += " expand"
+    return (
+        f'<div class="td-block">'
+        f'<div class="td-block-head">'
+        f'<span>{escape(label)}</span>{chip_html}'
+        f'</div>'
+        f'<div class="{body_class}">{body_html}</div>'
+        f'</div>'
+    )
+
+
+def _empty_body() -> str:
+    return '<span style="color: var(--fg-faint);">—</span>'
+
+
+def _render_decision_content(d: Decision) -> str:
     if d.type == DecisionType.MODEL_CALL:
-        m = d.input.get("model") or ""
-        return f"model_call · {m}".rstrip(" ·")
-    return d.type.value
+        return _render_model_call(d)
+    if d.type == DecisionType.TOOL_CALL:
+        return _render_tool_call(d)
+    if d.type == DecisionType.TOOL_RESULT:
+        return _render_tool_result(d)
+    if d.type == DecisionType.FINAL_OUTPUT:
+        return _render_final_output(d)
+    if d.type == DecisionType.REASONING:
+        return _render_reasoning(d)
+    return _render_unknown(d)
+
+
+def _render_model_call(d: Decision) -> str:
+    parts: list[str] = []
+
+    # PROMPT block (with model chip)
+    prompt: Any = d.input.get("prompt")
+    if not prompt and "messages" in d.input:
+        prompt = _format_messages(d.input["messages"])
+    prompt_body = escape(str(prompt)) if prompt else _empty_body()
+    model = d.input.get("model")
+    parts.append(
+        _render_block("PROMPT", prompt_body, chip=str(model) if model else None)
+    )
+
+    # RESPONSE block
+    response = d.output.get("text") or d.output.get("content")
+    if isinstance(response, list):
+        # Anthropic-style content blocks → flatten to text
+        response = "\n\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in response
+        )
+    response_body = escape(str(response)) if response else _empty_body()
+    parts.append(_render_block("RESPONSE", response_body))
+
+    return "".join(parts)
+
+
+def _render_tool_call(d: Decision) -> str:
+    name = d.input.get("name") or d.input.get("tool") or "?"
+    args = d.input.get("args")
+
+    body_parts = [
+        f'<div class="td-block-tool-name">{escape(str(name))}</div>'
+    ]
+    if isinstance(args, dict) and args:
+        body_parts.append(_render_kv_args(args))
+    elif args:
+        body_parts.append(escape(json.dumps(args, indent=2, default=str)))
+    return _render_block("TOOL CALL", "".join(body_parts))
+
+
+def _render_tool_result(d: Decision) -> str:
+    output = d.output or {}
+    name = (d.input or {}).get("name") or (d.input or {}).get("tool")
+    if not output:
+        # Don't render an empty box — inline italic empty-state instead.
+        chip = f"  · {name}" if name else ""
+        return (
+            f'<div class="td-block-empty">no result captured{escape(chip)}</div>'
+        )
+    body = escape(json.dumps(output, indent=2, default=str))
+    return _render_block("RESULT", body, chip=str(name) if name else None)
+
+
+def _render_final_output(d: Decision) -> str:
+    text = (d.output or {}).get("text") or (d.output or {}).get("content")
+    if isinstance(text, list):
+        text = "\n\n".join(
+            b.get("text", "") if isinstance(b, dict) else str(b) for b in text
+        )
+    body = escape(str(text)) if text else _empty_body()
+    # Prose typography (sans), no max-height — final answers can be long.
+    return _render_block("FINAL OUTPUT", body, mono=False, expand=True)
+
+
+def _render_reasoning(d: Decision) -> str:
+    text = (d.output or {}).get("text") or (d.output or {}).get("content")
+    body = escape(str(text)) if text else _empty_body()
+    return _render_block("REASONING", body)
+
+
+def _render_unknown(d: Decision) -> str:
+    label = d.type.value.upper()
+    parts: list[str] = []
+    if d.input:
+        parts.append(
+            '<div class="td-block-kv-key" style="font-size: 10.5px; '
+            'text-transform: uppercase; letter-spacing: 0.06em; '
+            'margin-bottom: 4px;">input</div>'
+        )
+        parts.append(escape(json.dumps(d.input, indent=2, default=str)))
+    if d.output:
+        if parts:
+            parts.append(
+                '<div class="td-block-kv-key" style="font-size: 10.5px; '
+                'text-transform: uppercase; letter-spacing: 0.06em; '
+                'margin: 8px 0 4px 0;">output</div>'
+            )
+        parts.append(escape(json.dumps(d.output, indent=2, default=str)))
+    body = "".join(parts) if parts else _empty_body()
+    return _render_block(label, body)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _render_kv_args(args: dict[str, Any]) -> str:
+    """Flat ``key: value`` rows for tool args. Falls back to JSON pretty-print
+    when any value is a dict/list (because rendering nested dicts on one
+    line gets unreadable fast)."""
+    has_complex = any(isinstance(v, (dict, list)) for v in args.values())
+    if has_complex:
+        return escape(json.dumps(args, indent=2, default=str))
+    rows: list[str] = []
+    for k, v in args.items():
+        v_str = v if isinstance(v, str) else json.dumps(v, default=str)
+        rows.append(
+            f'<div class="td-block-kv">'
+            f'<span class="td-block-kv-key">{escape(str(k))}:</span> '
+            f'{escape(v_str)}'
+            f'</div>'
+        )
+    return "".join(rows)
+
+
+def _format_messages(messages: Any) -> str:
+    """Format an ``input.messages`` list (Anthropic / OpenAI shape) into a
+    single readable string for the PROMPT block when no flat .prompt is set."""
+    if not isinstance(messages, list):
+        return str(messages)
+    parts: list[str] = []
+    for m in messages:
+        if not isinstance(m, dict):
+            parts.append(str(m))
+            continue
+        role = m.get("role", "?")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            content = "\n".join(
+                block.get("text", str(block)) if isinstance(block, dict) else str(block)
+                for block in content
+            )
+        parts.append(f"[{role}]\n{content}")
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
