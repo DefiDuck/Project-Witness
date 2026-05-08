@@ -47,6 +47,7 @@ from witness.ui.export import (
     preset_to_json,
     trace_to_markdown,
 )
+from witness.ui.lineage import render_lineage_svg
 from witness.ui.onboarding import SAMPLE_DOC, generate_sample_traces
 from witness.ui.theme import THEME_CSS
 
@@ -423,6 +424,21 @@ def page_load() -> None:
         if not _ss().loaded_traces:
             _onboarding_card()
         else:
+            # ---- Lineage graph (only when 1+ traces loaded) -----
+            st.markdown(
+                '<div class="uppercase-label" style="margin: 14px 0 8px 0;">'
+                "lineage</div>",
+                unsafe_allow_html=True,
+            )
+            svg = render_lineage_svg(
+                _ss().loaded_traces,
+                active_label=_ss().active_label,
+            )
+            if svg:
+                st.markdown(svg, unsafe_allow_html=True)
+            st.markdown(
+                '<div style="height: 14px;"></div>', unsafe_allow_html=True
+            )
             st.markdown(
                 '<div class="witness-table-header">'
                 '<span>filename</span>'

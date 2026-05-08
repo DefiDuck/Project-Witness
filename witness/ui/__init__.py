@@ -23,6 +23,7 @@ from witness.ui.export import (  # noqa: E402
     preset_to_json,
     trace_to_markdown,
 )
+from witness.ui.lineage import render_lineage_svg  # noqa: E402
 from witness.ui.onboarding import SAMPLE_DOC, generate_sample_traces  # noqa: E402
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "preset_from_json",
     "generate_sample_traces",
     "SAMPLE_DOC",
+    "render_lineage_svg",
 ]
