@@ -141,30 +141,53 @@ header[data-testid="stHeader"] { height: 0 !important; min-height: 0 !important;
 }
 [data-testid="stSidebar"] hr { border-color: var(--border); margin: 12px 0; }
 
-/* Sidebar nav radio: make labels look like nav buttons. We DO NOT touch the
-   font-family of the radio's inner icon span — the dot circle is part of
-   Streamlit's BaseUI radio and uses its own font. */
+/* Sidebar nav radio: BaseUI's radio applies its own colors and an
+   uppercase text-transform via inline styles + nested rules. We override
+   each with high-specificity selectors and !important. Without this,
+   the inactive nav items render at ~#555 against #0E0F11 (failing
+   WCAG) and labels show as TRACES / DIFFS / SETTINGS in caps. */
 [data-testid="stSidebar"] [role="radiogroup"] { gap: 2px; }
 [data-testid="stSidebar"] [role="radiogroup"] > label {
-    height: 28px;
-    padding: 0 8px;
+    height: 30px;
+    padding: 0 10px;
     border-radius: var(--radius);
-    color: var(--fg-dim);
     cursor: pointer;
     transition: background 80ms linear;
+    display: flex !important;
+    align-items: center !important;
 }
-[data-testid="stSidebar"] [role="radiogroup"] > label:hover { background: var(--hover); }
+[data-testid="stSidebar"] [role="radiogroup"] > label,
+[data-testid="stSidebar"] [role="radiogroup"] > label * {
+    color: var(--fg-muted) !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    font-family: var(--sans) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+[data-testid="stSidebar"] [role="radiogroup"] > label:hover {
+    background: var(--bg-raised);
+}
+[data-testid="stSidebar"] [role="radiogroup"] > label:hover,
+[data-testid="stSidebar"] [role="radiogroup"] > label:hover * {
+    color: var(--fg) !important;
+}
 [data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
-    color: var(--fg) !important;
-    background: var(--selected) !important;
+    background: var(--bg-raised) !important;
+    box-shadow: inset 2px 0 0 0 var(--accent);
 }
-[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) p {
+[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked),
+[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) * {
     color: var(--fg) !important;
-    font-weight: 500;
+    font-weight: 600 !important;
 }
 /* hide the radio's circle indicator */
-[data-testid="stSidebar"] [role="radiogroup"] > label > div:first-child { display: none; }
-[data-testid="stSidebar"] [role="radiogroup"] > label p { font-size: 12.5px; margin: 0; }
+[data-testid="stSidebar"] [role="radiogroup"] > label > div:first-child {
+    display: none !important;
+}
+[data-testid="stSidebar"] [role="radiogroup"] > label p {
+    margin: 0 !important;
+}
 
 /* ---- Buttons ------------------------------------------------------ */
 
