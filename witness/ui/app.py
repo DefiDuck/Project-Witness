@@ -55,6 +55,7 @@ from witness.ui.components.command_bar import (
 )
 from witness.ui.lineage import render_lineage_svg
 from witness.ui.theme import THEME_CSS
+from witness.ui.views.diff import render_diff_view
 from witness.ui.views.trace_detail import render_trace_detail
 from witness.ui.views.traces_list import render_traces_list
 
@@ -1671,8 +1672,32 @@ def view_traces() -> None:
 
 
 def view_diffs() -> None:
-    """Diffs nav — pick two traces and render their behavioral diff."""
-    page_diff()
+    """Diffs nav — pick two traces and render their gutter+minimap diff view."""
+    options = _trace_options()
+    if len(options) < 2:
+        _topbar("Diffs", "load two traces to begin")
+        empty_state(
+            icon="git-compare",
+            message="No diffs yet.",
+            hint="Open a trace and press <kbd>P</kbd> to perturb.",
+        )
+        return
+
+    cols = st.columns(2)
+    label_a = cols[0].selectbox("baseline", options, key="diffs_a")
+    label_b = cols[1].selectbox(
+        "perturbed", options, index=min(1, len(options) - 1), key="diffs_b"
+    )
+    if label_a == label_b:
+        st.warning("Pick two different traces.")
+        return
+
+    a = _ss().get("loaded_traces", {}).get(label_a)
+    b = _ss().get("loaded_traces", {}).get(label_b)
+    if a is None or b is None:
+        return
+    d = diff_traces(a, b)
+    render_diff_view(label_a, label_b, d)
 
 
 def view_settings() -> None:

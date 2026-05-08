@@ -1157,6 +1157,116 @@ kbd {
 .td-run-type { color: var(--fg-dim); font-size: 12px; }
 .td-run-decisions { color: var(--fg-faint); font-size: 11.5px; text-align: right; }
 
+/* ---- Diff view (commit 8) ------------------------------------- */
+
+.dv-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0 6px 0;
+    font-size: 14px;
+    color: var(--fg);
+}
+.dv-title-label { color: var(--fg); }
+.dv-title-arrow { color: var(--fg-muted); }
+
+.dv-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+}
+.dv-stat {
+    padding: 12px 16px;
+    border-right: 1px solid var(--border);
+}
+.dv-stat:last-child { border-right: 0; }
+.dv-stat-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+}
+.dv-stat-value {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+.dv-stat-of {
+    font-size: 11px;
+    color: var(--fg-faint);
+    margin-left: 4px;
+}
+
+.dv-body {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.dv-row {
+    display: grid;
+    grid-template-columns: 24px 1fr 1fr;
+    align-items: center;
+    height: 28px;
+    border-bottom: 1px solid var(--border);
+    transition: background 60ms linear;
+}
+.dv-row:last-child { border-bottom: 0; }
+.dv-row:target {
+    background: var(--bg-raised);
+    box-shadow: inset 2px 0 0 0 var(--accent);
+}
+.dv-gutter {
+    width: 24px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    border-right: 1px solid var(--border);
+}
+.dv-cell {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 12px;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-right: 1px solid var(--border);
+}
+.dv-cell:last-child { border-right: 0; }
+
+.dv-minimap {
+    position: relative;
+    width: 12px;
+    height: 100%;
+    min-height: 200px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+.dv-mini-tick {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    height: 2px;
+    border-radius: 1px;
+    transition: opacity 80ms linear;
+}
+.dv-mini-tick:hover {
+    opacity: 0.7;
+    transform: scaleY(2);
+    transform-origin: center;
+}
+
 /* ---- Command bar (commit 7) ---------------------------------- */
 
 .cb-overlay {
