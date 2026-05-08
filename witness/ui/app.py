@@ -50,6 +50,7 @@ from witness.ui.export import (
 from witness.ui.lineage import render_lineage_svg
 from witness.ui.onboarding import SAMPLE_DOC, generate_sample_traces
 from witness.ui.theme import THEME_CSS
+from witness.ui.views.traces_list import render_traces_list
 
 
 # ---------------------------------------------------------------------------
@@ -1766,26 +1767,63 @@ def _discover_trace_files() -> list[Path]:
 
 
 def view_traces() -> None:
-    """Traces nav — list of all loaded traces, opens trace detail on selection.
+    """Traces nav — dense table of loaded traces with row hover actions.
 
-    Detail vs. list is decided by URL query param ``?trace=<label>`` and the
-    session's active_label. Inspect-page rendering is reused for now and will
-    be replaced by a dedicated trace_detail view in commit 4.
+    URL contract:
+      ?trace=<label>                  — open trace detail (page_inspect for now;
+                                        commit 4 replaces this with trace_detail)
+      ?action=open&trace=<label>      — same as ?trace=<label>
+      ?action=diff&trace=<label>      — pre-select for Diffs page
+      ?action=remove&trace=<label>    — remove the trace from the session
+      ?sort=<column>                  — sort by column (toggles asc/desc)
     """
     qp = st.query_params
-    raw_trace_id = qp.get("trace")
-    trace_id: str | None
-    if isinstance(raw_trace_id, list):
-        trace_id = raw_trace_id[0] if raw_trace_id else None
-    else:
-        trace_id = raw_trace_id
     state = _ss()
+
+    def _qp_str(key: str) -> Optional[str]:
+        v = qp.get(key)
+        if isinstance(v, list):
+            return v[0] if v else None
+        return v
+
+    action = _qp_str("action")
+    trace_id = _qp_str("trace")
+
+    # ---- URL action dispatch ---------------------------------------
+    if action == "remove" and trace_id:
+        _remove_trace(trace_id)
+        st.toast(f"removed {trace_id}")
+        st.query_params.clear()
+        st.rerun()
+        return
+    if action == "diff" and trace_id:
+        state["active_label"] = trace_id
+        st.session_state["nav_target"] = "Diffs"
+        st.query_params.clear()
+        st.rerun()
+        return
+    if action == "open" and trace_id:
+        state["active_label"] = trace_id
+        # Fall through to detail rendering below by setting trace_id
+        # (no rerun needed; we already have the URL state we want).
+
+    # ---- Detail vs. list -------------------------------------------
     loaded: dict[str, Any] = state.get("loaded_traces", {})
     if trace_id is not None and trace_id in loaded:
         state["active_label"] = trace_id
         page_inspect()
-    else:
-        page_load()
+        return
+
+    # ---- List render -----------------------------------------------
+    _topbar(
+        "Traces",
+        f"{len(loaded)} loaded · drop a JSON file or press Ctrl/Cmd+O",
+    )
+    render_traces_list(
+        state,
+        add_trace=_add_trace,
+        on_empty=_onboarding_card,
+    )
 
 
 def view_diffs() -> None:

@@ -61,10 +61,9 @@ def test_app_renders_traces_section_without_errors() -> None:
     at = _new_app()
     at.run()
     assert not at.exception, f"unexpected exception: {at.exception}"
-    # Topbar uses "Load traces" while page_load is still being reused as the
-    # Traces list renderer. Commit 2 replaces this with a dense list view and
-    # the assertion will move to the new view's marker text.
-    assert "Load traces" in _page_text(at)
+    # Topbar shows "Traces" after the commit-2 dense list view replaced the
+    # legacy "Load traces" topbar.
+    assert "Traces" in _page_text(at)
 
 
 def test_app_switches_to_diffs_section() -> None:

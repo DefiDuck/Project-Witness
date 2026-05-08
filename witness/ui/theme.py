@@ -849,6 +849,99 @@ kbd {
 /* hide the streamlit "manage app" footer */
 [data-testid="stStatusWidget"] { display: none !important; }
 
+/* ---- Dense traces table (commit 2) ------------------------------ */
+
+.wt-table-head {
+    display: grid;
+    grid-template-columns: 16px 2fr 1.4fr 1.4fr 0.8fr 0.9fr 0.9fr 96px;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    user-select: none;
+}
+.wt-table-head .wt-col-head {
+    color: var(--fg-faint);
+    text-decoration: none;
+    transition: color 80ms linear;
+}
+.wt-table-head .wt-col-head:hover { color: var(--fg); }
+
+.wt-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px 2fr 1.4fr 1.4fr 0.8fr 0.9fr 0.9fr 96px;
+    gap: 12px;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    transition: background 80ms linear;
+    cursor: pointer;
+}
+.wt-row:hover { background: var(--bg-2); }
+.wt-row.active {
+    background: var(--bg-2);
+    box-shadow: inset 2px 0 0 0 var(--accent);
+}
+.wt-row .wt-dot { justify-self: center; }
+.wt-row .wt-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+}
+.wt-row .wt-filename { font-family: var(--mono); color: var(--fg); }
+.wt-row .wt-agent { color: var(--fg-dim); }
+.wt-row .wt-model { color: var(--fg-faint); font-size: 11.5px; }
+.wt-row .wt-decisions { color: var(--fg-dim); font-size: 11.5px; text-align: right; }
+.wt-row .wt-stability { font-size: 11.5px; text-align: right; }
+.wt-row .wt-captured { color: var(--fg-faint); font-size: 11px; text-align: right; }
+
+/* Whole-row click overlay — sits beneath the icon actions via z-index */
+.wt-row-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    text-decoration: none;
+    color: inherit;
+}
+
+.wt-actions {
+    grid-column: 8 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 100ms ease;
+    pointer-events: none;
+}
+.wt-row:hover .wt-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+.wt-action {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--fg-faint);
+    text-decoration: none;
+    transition: background 80ms linear, color 80ms linear;
+}
+.wt-action:hover { background: var(--bg-3); color: var(--fg); }
+.wt-action-danger:hover { color: var(--del); background: var(--del-bg); }
+.wt-action svg { display: block; }
+
 /* ---- Bordered containers (st.container(border=True)) ----------- */
 /* Used to group each Load-page trace row with its action buttons,  */
 /* and to tile the 3 onboarding sub-cards on the welcome panel.     */
