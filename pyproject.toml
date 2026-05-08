@@ -54,10 +54,10 @@ Homepage = "https://github.com/DefiDuck/WindTunnel"
 Issues = "https://github.com/DefiDuck/WindTunnel/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["witness"]
+packages = ["witness", "windtunnel"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/witness", "/tests", "/examples", "/README.md", "/LICENSE"]
+include = ["/witness", "/windtunnel", "/tests", "/examples", "/README.md", "/LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
