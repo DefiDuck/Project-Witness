@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.3.0 — 2026-05-08
+
+### Project rename: Witness → WindTunnel
+
+The project is now branded as **WindTunnel**. All user-visible strings (README,
+UI page titles, sidebar header, welcome card, CLI help text) say WindTunnel.
+The PyPI distribution is `pip install windtunnel`. The GitHub repo is
+`DefiDuck/WindTunnel`.
+
+The Python package keeps its `witness` directory name for stable imports —
+existing code that does `import witness` continues to work. The `witness`
+console script is preserved as a legacy alias of `windtunnel`. Both will
+keep working through the v0.x series.
+
+### New: trace-lineage SVG graph
+
+The Load page now renders a GitKraken-style trace-lineage view above the file
+list. Each loaded trace becomes one horizontal lane with colored decision dots
+(model_call=dim, tool_call/tool_result=accent amber, final_output=green).
+Sequence connector lines run through each lane; perturbed traces visually
+branch off from their parent baseline with a cubic-bezier curve. Wall time
+and decision count render to the right of each lane.
+
+Pure inline SVG (no JS, no chart library). Available programmatically as
+`witness.ui.render_lineage_svg(traces, active_label=None)`.
+
+### Tests
+
+5 new lineage smoke tests. Total: 140 (was 135).
+
 ## v0.2.0 — 2026-05-07
 
 ### Highlights

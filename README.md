@@ -1,6 +1,6 @@
 # WindTunnel
 
-[![tests](https://github.com/DefiDuck/Project-WindTunnel/actions/workflows/tests.yml/badge.svg)](https://github.com/DefiDuck/Project-WindTunnel/actions/workflows/tests.yml)
+[![tests](https://github.com/DefiDuck/WindTunnel/actions/workflows/tests.yml/badge.svg)](https://github.com/DefiDuck/WindTunnel/actions/workflows/tests.yml)
 [![python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
