@@ -69,6 +69,10 @@ def render_traces_list(
     ``add_trace`` and ``on_empty`` are wired by the caller (app.py)."""
 
     # ---- Search + filter pill row -----------------------------------
+    # The pill group is a row of anchor links, not st.radio — Streamlit's
+    # horizontal radio leaves the BaseUI circle indicators visible no
+    # matter how aggressively we try to hide them, and the labels render
+    # uppercase from the BaseUI stylesheet. Anchors give us total control.
     cols = st.columns([5, 3])
     with cols[0]:
         q_raw = st.text_input(
@@ -78,14 +82,9 @@ def render_traces_list(
             label_visibility="collapsed",
         )
         q = (q_raw or "").strip().lower()
+    kind = state.get("traces_kind", "all")
     with cols[1]:
-        kind = st.radio(
-            "kind",
-            ["all", "baseline", "perturbed"],
-            horizontal=True,
-            label_visibility="collapsed",
-            key="traces_kind",
-        )
+        st.markdown(_render_kind_pills(kind), unsafe_allow_html=True)
 
     loaded: dict[str, Trace] = state.get("loaded_traces", {})
 
@@ -120,8 +119,8 @@ def render_traces_list(
     sort_dir = state.get("traces_sort_dir", "desc")
 
     # ---- Filter + sort the rows ------------------------------------
-    rows = _filter_rows(loaded, q, kind)
-    rows = _sort_rows(rows, sort_key, sort_dir)
+    rows_filtered = _filter_rows(loaded, q, kind)
+    rows_filtered = _sort_rows(rows_filtered, sort_key, sort_dir)
 
     # ---- Column header (click to sort) -----------------------------
     st.markdown(_render_header(sort_key, sort_dir), unsafe_allow_html=True)
@@ -146,7 +145,7 @@ def render_traces_list(
     active_label = state.get("active_label")
     rows_html = "".join(
         _render_row(label, t, is_active=(label == active_label))
-        for label, t in rows
+        for label, t in rows_filtered
     )
     if not rows_html:
         st.markdown(
@@ -214,6 +213,16 @@ def _sort_rows(
 # ---------------------------------------------------------------------------
 # Per-row rendering
 # ---------------------------------------------------------------------------
+
+
+def _render_kind_pills(active: str) -> str:
+    """Connected pill group: all / baseline / perturbed. Anchor links to
+    ?kind=<value>; URL is processed in view_traces()."""
+    pills = []
+    for k in ("all", "baseline", "perturbed"):
+        cls = "wt-pill wt-pill-active" if k == active else "wt-pill"
+        pills.append(f'<a class="{cls}" href="?kind={k}">{k}</a>')
+    return f'<div class="wt-pill-group">{"".join(pills)}</div>'
 
 
 def _render_header(sort_key: str, sort_dir: str) -> str:

@@ -985,6 +985,35 @@ kbd {
 .wt-action-danger:hover { color: var(--del); background: var(--del-bg); }
 .wt-action svg { display: block; }
 
+/* Filter pill group on Traces (all / baseline / perturbed) */
+.wt-pill-group {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    height: 28px;
+}
+.wt-pill {
+    height: 26px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-muted);
+    background: transparent;
+    border-right: 1px solid var(--border);
+    text-decoration: none;
+    transition: background 80ms linear, color 80ms linear;
+}
+.wt-pill:last-child { border-right: 0; }
+.wt-pill:hover { color: var(--fg); background: var(--bg-raised); }
+.wt-pill-active {
+    color: var(--fg);
+    background: var(--bg-raised);
+}
+
 /* ---- Trace detail (commit 4) ----------------------------------- */
 
 .td-header {
@@ -1344,8 +1373,8 @@ kbd {
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 64px 24px;
-    gap: 8px;
+    padding: 36px 24px;
+    gap: 6px;
 }
 .es-icon {
     color: var(--fg-faint);

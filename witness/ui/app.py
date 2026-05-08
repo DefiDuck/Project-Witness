@@ -1611,8 +1611,14 @@ def view_traces() -> None:
 
     action = _qp_str("action")
     trace_id = _qp_str("trace")
+    kind = _qp_str("kind")
 
-    # ---- URL action dispatch ---------------------------------------
+    # ---- URL filter / action dispatch ------------------------------
+    if kind in ("all", "baseline", "perturbed"):
+        state["traces_kind"] = kind
+        st.query_params.clear()
+        st.rerun()
+        return
     if action == "remove" and trace_id:
         _remove_trace(trace_id)
         st.toast(f"removed {trace_id}")
