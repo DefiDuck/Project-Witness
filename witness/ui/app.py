@@ -17,6 +17,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import witness
 from witness.core.replay import replay
@@ -88,6 +89,75 @@ st.markdown(
     </a>
     """,
     unsafe_allow_html=True,
+)
+
+# Global keyboard shortcuts. JS runs in a hidden 0-height iframe and
+# attaches a keydown listener to the parent document (the actual app
+# page). When a shortcut fires, we change parent.location.search, which
+# triggers a Streamlit rerun. The existing URL dispatchers
+# (_handle_cmd_url, view_traces) handle the params.
+#
+# st.markdown strips <script> tags via Bleach. components.html bypasses
+# that by rendering inside a same-origin iframe; window.parent gives us
+# the top-level document.
+_active_for_js = json.dumps(st.session_state.get("active_label") or "")
+components.html(
+    f"""
+    <script>
+    (function() {{
+      const ACTIVE = {_active_for_js};
+      const doc = window.parent.document;
+      const navigate = (qs) => {{ window.parent.location.search = qs; }};
+
+      // Keep the active-trace value fresh across reruns; only bind once.
+      doc.__witness_active = ACTIVE;
+      if (doc.__witness_keys_bound) return;
+      doc.__witness_keys_bound = true;
+
+      const isTyping = (el) => {{
+        if (!el) return false;
+        const tag = (el.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return true;
+        if (el.isContentEditable) return true;
+        return false;
+      }};
+
+      doc.addEventListener("keydown", (e) => {{
+        if (isTyping(e.target)) return;
+        const k = e.key;
+        const mod = e.ctrlKey || e.metaKey;
+        const active = doc.__witness_active || "";
+
+        if (mod && (k === "k" || k === "K")) {{
+          e.preventDefault();
+          navigate("?cmd=open");
+          return;
+        }}
+        if (mod && (k === "o" || k === "O")) {{
+          e.preventDefault();
+          navigate("?nav=Settings");
+          return;
+        }}
+        if (k === "Escape") {{
+          navigate("?cmd_close=1");
+          return;
+        }}
+        if (k === "p" || k === "P") {{
+          if (!active) return;
+          e.preventDefault();
+          navigate("?trace=" + encodeURIComponent(active) + "&action=perturb");
+          return;
+        }}
+        if (k === "d" || k === "D") {{
+          e.preventDefault();
+          navigate("?nav=Diffs");
+          return;
+        }}
+      }});
+    }})();
+    </script>
+    """,
+    height=0,
 )
 
 
@@ -1815,6 +1885,22 @@ def _handle_cmd_url() -> None:
         st.session_state["nav_target"] = nav
         st.query_params.clear()
         st.rerun()
+
+    # ?action=perturb&trace=<label> — fired by the P keyboard shortcut and
+    # the command bar's "Perturb current trace" entry. Set the active
+    # trace, route to the (hidden) Perturb view, and clear URL.
+    action_raw = qp.get("action")
+    action = action_raw[0] if isinstance(action_raw, list) and action_raw else action_raw
+    trace_raw = qp.get("trace")
+    trace_id = trace_raw[0] if isinstance(trace_raw, list) and trace_raw else trace_raw
+    if action == "perturb" and trace_id:
+        loaded = state.get("loaded_traces") or {}
+        if trace_id in loaded:
+            close_command_bar(state)
+            state["active_label"] = trace_id
+            state["force_view"] = "Perturb"
+            st.query_params.clear()
+            st.rerun()
     # Note: ?dv_view=ribbon|list is read directly in views/diff.py — no
     # central dispatch needed; the URL persists naturally between reruns.
 
@@ -1880,7 +1966,13 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-PAGES[page]()
+# Hidden views (not in the sidebar) take precedence when force_view is set.
+# Cleared on read so the next rerun falls back to normal nav.
+_forced_view = _ss().pop("force_view", None)
+if _forced_view == "Perturb":
+    page_perturb()
+else:
+    PAGES[page]()
 
 # Command-bar overlay renders last so it sits on top of the page.
 render_command_bar(_ss())
