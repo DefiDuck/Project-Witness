@@ -25,6 +25,15 @@ import streamlit as st
 from witness.core.schema import Decision, DecisionType, Trace
 from witness.ui.components import empty_state
 from witness.ui.components.flow import render_flow_ribbon
+from witness.ui.components.play_controls import (
+    advance_index,
+    get_state,
+    handle_url_action,
+    maybe_autorefresh,
+    parse_speed,
+    render_play_controls,
+    reset_for_trace,
+)
 
 _TYPE_COLOR = {
     DecisionType.MODEL_CALL.value: "var(--fg-dim)",
@@ -176,33 +185,110 @@ def _render_sequence(
         )
         return
 
-    # Selection (URL ?sel=<i> wins over session state on this render)
-    sel_key = f"td_sel_{label}"
-    selected: int = state.get(sel_key, 0)
-    if selected >= len(trace.decisions):
-        selected = 0
-    qp = st.query_params
-    sel_raw = qp.get("sel")
-    sel_param = sel_raw[0] if isinstance(sel_raw, list) and sel_raw else sel_raw
-    if sel_param is not None:
-        try:
-            new_sel = int(sel_param)
-        except ValueError:
-            new_sel = selected
-        if 0 <= new_sel < len(trace.decisions) and new_sel != selected:
-            state[sel_key] = new_sel
-            selected = new_sel
+    total = len(trace.decisions)
 
-    # ---- Flow ribbon (the trace's iconic visualization) ----
-    ribbon = render_flow_ribbon(label, trace.decisions, selected=selected)
+    # Reset play state any time the active trace changes — this is the
+    # safety belt against runaway autorefresh after navigation.
+    last_label = state.get("_play_last_label")
+    if last_label != label:
+        state["_play_last_label"] = label
+        reset_for_trace(state, total)
+
+    play = get_state(state)
+
+    # ---- Apply ?play_action= URL transitions BEFORE reading sel ------------
+    qp = st.query_params
+    action_raw = qp.get("play_action")
+    action = (
+        action_raw[0]
+        if isinstance(action_raw, list) and action_raw
+        else action_raw
+    )
+    sel_raw = qp.get("sel")
+    sel_param = (
+        sel_raw[0] if isinstance(sel_raw, list) and sel_raw else sel_raw
+    )
+    speed_raw = qp.get("play_speed")
+    speed_param = parse_speed(
+        speed_raw[0] if isinstance(speed_raw, list) and speed_raw else speed_raw
+    ) if speed_raw is not None else None
+
+    sel_int: int | None
+    try:
+        sel_int = int(sel_param) if sel_param is not None else None
+    except ValueError:
+        sel_int = None
+
+    if action is not None:
+        changed = handle_url_action(
+            state, total, action=action, sel=sel_int, speed=speed_param,
+        )
+        if changed:
+            # Persist the post-action index back into the URL and drop
+            # the transient action params before rerunning.
+            new_sel = play["index"]
+            new_qp: dict[str, str] = {"trace": label, "tab": "sequence"}
+            new_qp["sel"] = str(new_sel)
+            st.query_params.clear()
+            for k, v in new_qp.items():
+                st.query_params[k] = v
+            st.rerun()
+
+    # ---- Apply plain ?sel from URL (deep-link / keyboard nav) -------------
+    sel_key = f"td_sel_{label}"
+    selected: int = state.get(sel_key, play["index"])
+    if selected >= total:
+        selected = 0
+    if sel_int is not None and 0 <= sel_int < total and sel_int != selected:
+        state[sel_key] = sel_int
+        selected = sel_int
+        play["index"] = sel_int
+
+    # ---- Auto-advance during playback (drives the ?sel= URL forward) -------
+    if play["playing"]:
+        next_i, should_pause = advance_index(play["index"], total)
+        if next_i != play["index"]:
+            play["index"] = next_i
+            selected = next_i
+            state[sel_key] = next_i
+            # Mirror to URL so links / keyboard jumps land at the right step.
+            st.query_params["sel"] = str(next_i)
+        if should_pause:
+            play["playing"] = False
+
+    # Wire the auto-refresh tick LAST so it fires on the next rerun cycle.
+    maybe_autorefresh(play)
+
+    # ---- Play controls strip ------------------------------------------------
+    base_q = f"?trace={escape(label)}&tab=sequence"
+    pc_html = render_play_controls(label, total, play, base_query=base_q)
+    if pc_html:
+        st.markdown(pc_html, unsafe_allow_html=True)
+
+    # ---- Flow ribbon -------------------------------------------------------
+    ribbon = render_flow_ribbon(
+        label,
+        trace.decisions,
+        selected=selected,
+        play_index=play["index"] if play["playing"] else None,
+    )
     st.markdown(
         f'<div class="flow-ribbon-wrap">{ribbon}</div>',
         unsafe_allow_html=True,
     )
 
-    # ---- Hairline divider, then the typed content blocks ----
+    # ---- Hairline divider, then the typed content blocks ------------------
+    # Wrap the content pane in a per-step animation class so the browser
+    # treats every selection change as a fresh keyframe and re-runs the
+    # 240ms flash. The id="td-content-anchor" is the scroll target.
+    flash_class = f"td-content-flash-{selected}"
     st.markdown('<hr class="flow-divider"/>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div id="td-content-anchor" class="td-content-pane {flash_class}">',
+        unsafe_allow_html=True,
+    )
     _render_decision_fields(trace.decisions[selected])
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _render_decision_fields(d: Decision) -> None:

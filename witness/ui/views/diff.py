@@ -20,7 +20,10 @@ that decision.
 """
 from __future__ import annotations
 
+import difflib
+import json
 from html import escape
+from typing import Any
 
 import streamlit as st
 
@@ -64,12 +67,15 @@ def render_diff_view(
         with minimap:
             _render_minimap(diff)
     else:
+        expanded = _read_expand_param(diff.alignment.pairs)
         st.markdown(
             f'<div class="flow-ribbon-wrap">'
-            f'{render_diff_ribbons(label_a, label_b, diff.alignment.pairs)}'
+            f'{render_diff_ribbons(label_a, label_b, diff.alignment.pairs, expanded_slot=expanded)}'
             f'</div>',
             unsafe_allow_html=True,
         )
+        if expanded is not None:
+            _render_expansion_card(expanded, diff.alignment.pairs[expanded])
 
 
 def _read_view_param() -> str:
@@ -242,6 +248,234 @@ def _render_minimap(diff: TraceDiff) -> None:
         f'<div class="dv-minimap">{"".join(ticks)}</div>',
         unsafe_allow_html=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Inline expansion card (?expand=<i>) — the killer view of the diff page
+# ---------------------------------------------------------------------------
+
+
+def _read_expand_param(pairs: list[DecisionChange]) -> int | None:
+    """Read and bounds-check the ``?expand=`` query param.
+
+    Returns the slot index (0-based) when valid, else ``None``. Out-of-range
+    values silently fall back to no expansion rather than erroring — the
+    user might have an old deep-link after the underlying alignment shrank.
+    """
+    qp = st.query_params
+    raw = qp.get("expand")
+    val = raw[0] if isinstance(raw, list) and raw else raw
+    if val is None:
+        return None
+    try:
+        idx = int(val)
+    except (TypeError, ValueError):
+        return None
+    if 0 <= idx < len(pairs):
+        return idx
+    return None
+
+
+_KIND_LABEL = {
+    "same": "unchanged",
+    "input_changed": "input changed",
+    "output_changed": "output changed",
+    "both_changed": "both changed",
+    "type_changed": "type changed",
+    "added": "added",
+    "removed": "removed",
+}
+
+
+def _render_expansion_card(slot: int, ch: DecisionChange) -> None:
+    """Render the inline two-column expansion card below the ribbons.
+
+    Left column: the baseline decision at this slot. Right column: the
+    perturbed decision. If one side is missing (added or removed), that
+    column shows a single italic empty-state line per the brief.
+
+    Diffs in field values get character-level highlights via
+    ``_diff_text``; long fields fall back to line-level diff implicitly
+    because ndiff handles both.
+    """
+    a, b = ch.baseline, ch.perturbed
+    kind_text = _KIND_LABEL.get(ch.kind, ch.kind)
+    type_text = (a.type.value if a is not None else b.type.value if b is not None else "—")
+    fields = _changed_fields(a, b)
+    fields_html = (
+        f'<span class="dv-expand-meta-fields">changed: {escape(", ".join(fields))}</span>'
+        if fields
+        else ""
+    )
+
+    # Close link clears just the expand param; the rest of the URL state
+    # (dv_view, etc.) survives by virtue of being preserved in the page.
+    close_href = "?dv_view=ribbon"
+
+    st.markdown(
+        f'<div class="dv-expand-wrap">'
+        f'<div class="dv-expand-card">'
+        f'<div class="dv-expand-meta">'
+        f'<span>step {slot + 1} · {escape(type_text)} · {escape(kind_text)}</span>'
+        f'<a class="dv-expand-close" href="{close_href}">× Close</a>'  # noqa: RUF001
+        f'</div>'
+        f'{fields_html}'
+        f'<div class="dv-expand-grid">'
+        f'<div class="dv-expand-col">'
+        f'<div class="dv-expand-col-head">Baseline · step {slot + 1}</div>'
+        f'{_render_expansion_side(a, b, side="baseline")}'
+        f'</div>'
+        f'<div class="dv-expand-col">'
+        f'<div class="dv-expand-col-head">Perturbed · step {slot + 1}</div>'
+        f'{_render_expansion_side(b, a, side="perturbed")}'
+        f'</div>'
+        f'</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _changed_fields(a: Decision | None, b: Decision | None) -> list[str]:
+    """Names of fields that differ between two decisions, for the
+    ``changed: input, output`` chip in the metadata strip."""
+    out: list[str] = []
+    if a is None or b is None:
+        return out
+    if a.type != b.type:
+        out.append("type")
+    if (a.input or {}) != (b.input or {}):
+        out.append("input")
+    if (a.output or {}) != (b.output or {}):
+        out.append("output")
+    return out
+
+
+def _render_expansion_side(
+    self_d: Decision | None,
+    other_d: Decision | None,
+    *,
+    side: str,
+) -> str:
+    """Render one column of the expansion card.
+
+    When ``self_d`` is None, render the empty-state line (added on the
+    baseline side, removed on the perturbed side). Otherwise render typed
+    content blocks with character-level diff fragments highlighting any
+    field that changed between sides.
+    """
+    if self_d is None:
+        msg = (
+            "not in baseline" if side == "baseline" else "not in perturbed"
+        )
+        return f'<div class="dv-expand-col-empty">{escape(msg)}</div>'
+
+    blocks: list[str] = []
+
+    # Type block — show as a small caps-label so the expanded view echoes
+    # the ribbon node's primary signal.
+    blocks.append(
+        _diff_block("TYPE", self_d.type.value, other_d.type.value if other_d else None)
+    )
+
+    # Input + output get JSON-formatted then character-diffed against the
+    # other side. For the trivial 'same' case there's nothing to highlight,
+    # which _diff_text handles by returning escaped plain text.
+    self_in = _stringify_field(self_d.input or {})
+    other_in = _stringify_field(other_d.input or {}) if other_d else None
+    blocks.append(_diff_block("INPUT", self_in, other_in))
+
+    self_out = _stringify_field(self_d.output or {})
+    other_out = _stringify_field(other_d.output or {}) if other_d else None
+    blocks.append(_diff_block("OUTPUT", self_out, other_out))
+
+    return "".join(blocks)
+
+
+def _stringify_field(v: Any) -> str:
+    """Compact pretty-print a JSON-ish value so ndiff can chew it
+    line-by-line. We deliberately use indent=2 so multi-line values get
+    aligned and difflib can produce clean line-level highlights."""
+    if isinstance(v, str):
+        return v
+    try:
+        return json.dumps(v, indent=2, default=str, sort_keys=True)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _diff_block(label: str, self_text: str, other_text: str | None) -> str:
+    """Wrap a ``label + body`` pair in the same caps-header block the
+    trace detail uses, but the body's text gets ndiff highlights."""
+    body = _diff_text(self_text, other_text)
+    return (
+        f'<div class="td-block">'
+        f'<div class="td-block-head"><span>{escape(label)}</span></div>'
+        f'<div class="td-block-body">{body}</div>'
+        f'</div>'
+    )
+
+
+def _diff_text(self_text: str, other_text: str | None) -> str:
+    """Render ``self_text`` with green/red span fragments for the parts
+    that differ from ``other_text``.
+
+    For short single-line values we use ``ndiff`` at character granularity;
+    for long multi-line values we use ``unified_diff``-style line-level
+    chunks. ``ndiff`` itself produces both — we just inspect the leading
+    marker on each chunk.
+    """
+    if other_text is None:
+        # Other side is missing — entire body is treated as an addition
+        # on this side (or a removal, depending on orientation; the
+        # caller dictates by passing self / other).
+        return f'<span class="dv-frag-add">{escape(self_text)}</span>'
+
+    if self_text == other_text:
+        return escape(self_text)
+
+    # Pick char vs line granularity based on length. ``128`` keeps short
+    # tool args char-level (so single-token swaps highlight cleanly) and
+    # long prompts line-level (so the diff stays scannable).
+    if len(self_text) <= 128 and len(other_text) <= 128 and "\n" not in self_text:
+        return _diff_chars(self_text, other_text)
+    return _diff_lines(self_text, other_text)
+
+
+def _diff_chars(self_text: str, other_text: str) -> str:
+    """Character-level diff via ``ndiff``. Each chunk is one character."""
+    parts: list[str] = []
+    for chunk in difflib.ndiff(other_text, self_text):
+        # ndiff produces "  c" / "+ c" / "- c" / "? …"; the trailing line is
+        # a hint, skipped here. We only emit the SELF side: " " and "+".
+        if not chunk:
+            continue
+        marker = chunk[:1]
+        ch = chunk[2:] if len(chunk) >= 2 else ""
+        if marker == " ":
+            parts.append(escape(ch))
+        elif marker == "+":
+            parts.append(f'<span class="dv-frag-add">{escape(ch)}</span>')
+        # marker '-' is the OTHER side; we don't render it on this column.
+        # marker '?' is the hint line; skip.
+    return "".join(parts)
+
+
+def _diff_lines(self_text: str, other_text: str) -> str:
+    """Line-level diff for long values. Same strategy as
+    ``_diff_chars`` but operating on splitlines()."""
+    self_lines = self_text.splitlines(keepends=False)
+    other_lines = other_text.splitlines(keepends=False)
+    out: list[str] = []
+    for chunk in difflib.ndiff(other_lines, self_lines):
+        if not chunk:
+            continue
+        marker = chunk[:1]
+        line = chunk[2:] if len(chunk) >= 2 else ""
+        if marker == " ":
+            out.append(escape(line))
+        elif marker == "+":
+            out.append(f'<span class="dv-frag-add">{escape(line)}</span>')
+        # again, skip '-' (other side) and '?' (hint).
+    return "\n".join(out)
 
 
 __all__ = ["render_diff_view"]

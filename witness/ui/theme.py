@@ -77,6 +77,29 @@ THEME_CSS = """
     /* Radii — 6px inputs/buttons, 8px surfaces, 0 for list rows */
     --radius:    6px;
     --radius-lg: 8px;
+
+    /* Motion tokens — three durations cover everything we ship.
+       --dur-1: snap (hover, focus, button states).
+       --dur-2: short (entrances, content flash, expansion cards).
+       --dur-3: medium (the ribbon's draw-in / pulse cycles). */
+    --dur-1: 120ms;
+    --dur-2: 240ms;
+    --dur-3: 320ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/* Respect the OS reduced-motion preference. We don't disable transitions
+   wholesale (focus rings still need to feel responsive), but we kill the
+   flashy keyframes so nothing distracting plays. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 /* ---- Streamlit page chrome ---------------------------------------- */
@@ -1549,6 +1572,244 @@ kbd {
     color: var(--fg-faint);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+}
+
+/* ---- Playable ribbon — content flash + scroll anchor ----------- */
+/* When the user clicks a ribbon node the URL ?sel changes. We re-emit
+   the content pane with a dynamic class ``td-content-flash-<sel>`` so
+   the browser treats it as a NEW animation each render and re-runs the
+   keyframe from frame 0. (Without the unique class the browser would
+   see the same animation-name, conclude nothing changed, and skip it.)
+   The flash itself is a quick opacity dip + 2px lift, 240ms. */
+
+@keyframes td-content-flash-base {
+    0%   { opacity: 1;   transform: translateY(0);   }
+    35%  { opacity: 0.4; transform: translateY(2px); }
+    100% { opacity: 1;   transform: translateY(0);   }
+}
+.td-content-pane {
+    /* Page anchor scroll target — 80px headroom so the active block
+       lands a comfortable distance below the ribbon when the URL anchor
+       fires. scroll-behavior on html (below) makes the jump smooth. */
+    scroll-margin-block-start: 80px;
+}
+/* The dynamic ``td-content-flash-<n>`` classes all forward to the same
+   keyframe via CSS attribute-prefix selectors. The unique class names
+   live in flow.py so each render is treated as a new animation by the
+   browser. */
+[class*="td-content-flash-"] {
+    animation: td-content-flash-base var(--dur-2) var(--ease-out);
+}
+
+html { scroll-behavior: smooth; }
+
+/* ---- Play controls strip --------------------------------------- */
+
+.pc-strip {
+    display: grid;
+    grid-template-columns: 28px 28px auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    height: 32px;
+    padding: 0 0 0 0;
+    margin: 0 0 8px 0;
+}
+
+.pc-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    color: var(--fg-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: background var(--dur-1) var(--ease-out),
+                color var(--dur-1) var(--ease-out),
+                border-color var(--dur-1) var(--ease-out);
+}
+.pc-btn:hover {
+    color: var(--fg);
+    border-color: var(--border-hover);
+    background: var(--bg-page);
+}
+.pc-btn[aria-disabled="true"] {
+    color: var(--fg-disabled);
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.pc-btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+}
+.pc-btn-primary:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+    filter: brightness(1.06);
+}
+.pc-btn-active {
+    background: transparent;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.pc-step {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+/* Scrubber: a 4px-tall track with click-to-jump anchored hot-zones.
+   We can't do real drag without JS, but click-to-jump is enough; the
+   brief explicitly forbids drag here. */
+.pc-scrubber {
+    position: relative;
+    height: 18px;            /* hit-zone; visual bar is 4px centered */
+    display: flex;
+    align-items: center;
+}
+.pc-scrubber-track {
+    position: absolute;
+    left: 0; right: 0;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+}
+.pc-scrubber-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width var(--dur-2) var(--ease-out);
+}
+.pc-scrubber-hit {
+    position: absolute;
+    top: 0; bottom: 0;
+    cursor: pointer;
+    z-index: 1;
+}
+.pc-scrubber-hit:hover ~ .pc-scrubber-track {
+    background: var(--border-hover);
+}
+
+.pc-speeds {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11.5px;
+}
+.pc-speed {
+    color: var(--fg-faint);
+    text-decoration: none;
+    padding: 2px 0;
+    border-bottom: 1.5px solid transparent;
+    transition: color var(--dur-1) var(--ease-out),
+                border-color var(--dur-1) var(--ease-out);
+}
+.pc-speed:hover { color: var(--fg-muted); }
+.pc-speed-active {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+}
+.pc-speed-sep { color: var(--fg-disabled); }
+
+/* When playback is on, the ribbon's active node gets an extra outer
+   glow on top of its normal selected ring + halo. Distinguishes
+   "manually clicked" from "watching the agent step through." */
+.flow-node-play-active .flow-node-body {
+    filter: drop-shadow(0 0 6px rgba(232, 169, 81, 0.55));
+}
+
+/* ---- Diff page: inline expansion card -------------------------- */
+/* Clicking a node on the stacked diff ribbons opens a card BELOW the
+   ribbons (not a modal — explicitly forbidden by the brief). Two
+   columns: baseline | perturbed. Diff fragments highlighted inside the
+   typed content blocks with green/red tints. */
+
+.dv-expand-wrap {
+    margin-top: 24px;
+}
+.dv-expand-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    background: var(--bg-surface);
+    animation: dv-expand-enter var(--dur-2) var(--ease-out);
+}
+@keyframes dv-expand-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0);   }
+}
+.dv-expand-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-bottom: 12px;
+}
+.dv-expand-meta-fields {
+    color: var(--fg-faint);
+}
+.dv-expand-close {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-faint);
+    text-decoration: none;
+    transition: color var(--dur-1) var(--ease-out);
+}
+.dv-expand-close:hover { color: var(--fg); }
+
+.dv-expand-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.dv-expand-col {
+    min-width: 0;  /* let long content wrap, not blow the column */
+}
+.dv-expand-col-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+.dv-expand-col-empty {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-style: italic;
+    color: var(--fg-faint);
+    padding: 12px 0;
+}
+
+/* In-block diff fragments: span-level highlights inside the existing
+   td-block-body. Use the existing add/del-bg tokens so the palette
+   stays consistent with the gutter list view. */
+.dv-frag-add {
+    background: var(--add-bg);
+    color: var(--ok);
+    border-radius: 2px;
+    padding: 0 1px;
+}
+.dv-frag-del {
+    background: var(--del-bg);
+    color: var(--err);
+    text-decoration: line-through;
+    text-decoration-color: rgba(248, 81, 73, 0.5);
+    border-radius: 2px;
+    padding: 0 1px;
 }
 
 /* ---- Bordered containers (st.container(border=True)) ----------- */

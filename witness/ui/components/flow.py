@@ -111,6 +111,8 @@ def render_flow_ribbon(
     *,
     selected: int = 0,
     diff: dict[int, str] | None = None,
+    play_index: int | None = None,
+    inline_click: bool = False,
 ) -> str:
     """Render the trace's decision sequence as a horizontal flow ribbon.
 
@@ -118,9 +120,26 @@ def render_flow_ribbon(
     Pure function — no Streamlit calls. Empty decisions → empty string;
     callers should render the canonical empty state instead.
 
-    ``diff`` maps decision index → ``"added" | "removed" | "changed"`` for
-    overlay annotations. Only used when comparing two traces; the trace
-    detail Sequence tab passes ``None``.
+    Parameters
+    ----------
+    selected:
+        Index of the manually-selected node (gets the ring + halo).
+    diff:
+        Maps decision index → ``"added" | "removed" | "changed"`` for
+        overlay annotations. Only used when comparing two traces; the
+        trace detail Sequence tab passes ``None``.
+    play_index:
+        When playback is active, the node at this index gets an
+        additional ``flow-node-play-active`` class so CSS can layer an
+        amber outer glow on top of the normal selection ring. Pass
+        ``None`` to disable the playback overlay.
+    inline_click:
+        When ``True`` (the diff page), node anchors emit
+        ``?expand=<i>`` so the click stays on the diff page and triggers
+        the inline expansion card. When ``False`` (the trace detail
+        page), node anchors emit
+        ``?trace=<label>&tab=sequence&sel=<i>`` so the click navigates
+        within the trace.
     """
     if not decisions:
         return ""
@@ -153,6 +172,8 @@ def render_flow_ribbon(
                 selected=(i == selected),
                 diff_kind=diff.get(i),
                 hide_duration=all_none,
+                play_active=(play_index is not None and i == play_index),
+                inline_click=inline_click,
             )
         )
     parts.append("</svg>")
@@ -171,6 +192,8 @@ def render_diff_ribbons(
     *,
     selected_a: int = -1,
     selected_b: int = -1,
+    expanded_slot: int | None = None,
+    inline_click: bool = True,
 ) -> str:
     """Render baseline and perturbed flow ribbons stacked, with connection
     lines for matched pairs and ghost stubs for added/removed.
@@ -307,6 +330,16 @@ def render_diff_ribbons(
     )
     parts.append('</g>')
 
+    # When a slot is expanded on the diff view, both the baseline and
+    # perturbed nodes at that slot get the selection ring so the user
+    # sees the pair that the expansion card is showing.
+    sel_a_effective = (
+        expanded_slot if expanded_slot is not None else selected_a
+    )
+    sel_b_effective = (
+        expanded_slot if expanded_slot is not None else selected_b
+    )
+
     # Baseline ribbon nodes.
     for slot, d_a in enumerate(a_decisions):
         if d_a is None:
@@ -319,11 +352,12 @@ def render_diff_ribbons(
                 slot,
                 (x_pos, w),
                 label=label_a,
-                selected=(slot == selected_a),
+                selected=(slot == sel_a_effective),
                 diff_kind=a_kinds.get(slot),
                 hide_duration=use_uniform,
                 y_offset=a_y,
                 href_tab="diffs",
+                inline_click=inline_click,
             )
         )
 
@@ -339,11 +373,12 @@ def render_diff_ribbons(
                 slot,
                 (x_pos, w),
                 label=label_b,
-                selected=(slot == selected_b),
+                selected=(slot == sel_b_effective),
                 diff_kind=b_kinds.get(slot),
                 hide_duration=use_uniform,
                 y_offset=b_y,
                 href_tab="diffs",
+                inline_click=inline_click,
             )
         )
 
@@ -473,6 +508,8 @@ def _render_node(
     hide_duration: bool,
     y_offset: float = 0.0,
     href_tab: str = "sequence",
+    play_active: bool = False,
+    inline_click: bool = False,
 ) -> str:
     x_n, w_n = pos
     color = TYPE_COLOR.get(d.type.value, "var(--fg-muted)")
@@ -529,7 +566,16 @@ def _render_node(
     text_x = x_n + w_n / 2
     text_y = node_y + NODE_HEIGHT / 2 + 4
 
-    href = f"?trace={escape(label)}&tab={href_tab}&sel={i}"
+    # URL contract:
+    # - inline_click=False (trace detail Sequence tab): clicking navigates
+    #   to that decision via ?trace=<label>&tab=sequence&sel=<i>.
+    # - inline_click=True (diff page): clicking opens the inline expansion
+    #   card via ?expand=<i>; we deliberately do NOT navigate to a trace.
+    href = (
+        f"?expand={i}"
+        if inline_click
+        else f"?trace={escape(label)}&tab={href_tab}&sel={i}"
+    )
     duration_text = ""
     if not hide_duration:
         dur = _format_duration(d.duration_ms)
@@ -545,10 +591,16 @@ def _render_node(
     accent_y = node_y
     accent = _accent_path(x_n, accent_y, w_n, color)
 
+    classes = ["flow-node"]
+    if selected:
+        classes.append("flow-node-active")
+    if play_active:
+        classes.append("flow-node-play-active")
+
     return (
         f'<a href="{href}" xlink:href="{href}" id="node-{i}" '
         f'class="flow-node-link">'
-        f'<g class="flow-node{" flow-node-active" if selected else ""}" '
+        f'<g class="{" ".join(classes)}" '
         f'opacity="{opacity}" '
         f'style="animation-delay: {delay}ms">'
         f'{halo}'
